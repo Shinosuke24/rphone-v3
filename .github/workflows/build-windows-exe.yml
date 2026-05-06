@@ -43,7 +43,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path (Split-Path $runtimeDir -Parent) | Out-Null
 
           & "$env:JAVA_HOME\bin\jlink.exe" `
-            --add-modules java.base,java.desktop,java.logging,java.management,java.naming,java.sql,java.xml `
+            --add-modules java.base,java.desktop,java.logging,java.management,java.naming,java.sql,java.xml,java.instrument,java.prefs,java.net.http,jdk.unsupported `
             --strip-debug `
             --no-header-files `
             --no-man-pages `

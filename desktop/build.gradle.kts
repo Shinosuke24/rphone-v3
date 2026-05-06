@@ -70,5 +70,11 @@ configure<Launch4jPluginExtension> {
     // Use bundled Java runtime from jlink output (relative to EXE)
     bundledJrePath = "jre"
     headerType = "gui"
-    jvmOptions = listOf("-Xms128m", "-Xmx1024m", "-Dfile.encoding=UTF-8")
+    jvmOptions = listOf(
+        "-Xms128m",
+        "-Xmx1024m",
+        "-Dfile.encoding=UTF-8",
+        "-Djavafx.preloader=",
+        "-Djdk.nio.maxCachedBufferSize=262144"
+    )
 }
