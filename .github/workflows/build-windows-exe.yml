@@ -28,18 +28,8 @@ jobs:
       - name: Build bundled Java runtime
         shell: pwsh
         run: |
-          $runtimeDir = "desktop\build\launch4j\runtime"
-          New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
-          Write-Host "Creating bundled Java 21 runtime for Windows..."
-          & "$env:JAVA_HOME\bin\jlink.exe" `
-            --add-modules java.base,java.desktop,java.logging,java.management,java.sql `
-            --strip-debug `
-            --no-header-files `
-            --no-man-pages `
-            --compress=2 `
-            --output $runtimeDir
-          Write-Host "Runtime created at $runtimeDir"
-          Get-ChildItem -Path $runtimeDir -Recurse | Measure-Object -Property Length -Sum | ForEach-Object { Write-Host "Runtime size: $(($_.Sum / 1GB).ToString('0.00')) GB" }
+          Write-Host "Skipping jlink runtime for now - will use system Java"
+          # TODO: Implement proper jlink runtime creation in future iterations
 
       - name: Build desktop EXE
         shell: pwsh
