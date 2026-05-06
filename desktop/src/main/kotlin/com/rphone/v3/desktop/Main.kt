@@ -428,7 +428,8 @@ class RPhoneDesktopApp : Application() {
         probeOhmLabel = label("0.0 Ω", green, 13.0, false)
 
         probeHistoryList = ListView(FXCollections.observableArrayList<String>()).apply {
-            prefHeight = 220.0
+            prefHeight = 420.0
+            style = controlStyle()
         }
 
         val modeTabs = tabRow(
@@ -439,7 +440,7 @@ class RPhoneDesktopApp : Application() {
             )
         )
 
-        val topCard = card("Probe Meter", VBox(8.0).apply {
+        val topCard = card("Probe Mode", VBox(8.0).apply {
             children.addAll(
                 probeModeLabel,
                 probeValue,
@@ -453,9 +454,9 @@ class RPhoneDesktopApp : Application() {
             )
         })
 
-        return scrollPage(VBox(10.0).apply {
+        val leftColumn = VBox(10.0).apply {
+            prefWidth = 460.0
             children.addAll(
-                pageHeader("PROBE MODE", amber, "PROBE"),
                 topCard,
                 card("Mode Tabs", modeTabs),
                 card("Probe Actions", VBox(8.0).apply {
@@ -467,8 +468,30 @@ class RPhoneDesktopApp : Application() {
                             secondaryActionButton("COMPARE", purple) { selectPage(DesktopPage.WAVEID) }
                         )
                     )
-                }),
-                card("Riwayat Probe", probeHistoryList)
+                })
+            )
+        }
+
+        val rightColumn = card("Riwayat", VBox(8.0).apply {
+            children.addAll(
+                actionButtonsRow(
+                    secondaryActionButton("COMPARE", purple) { selectPage(DesktopPage.WAVEID) },
+                    secondaryActionButton("PASIF", cyan) { notification.showMessage("Filter PASIF") },
+                    secondaryActionButton("AKTIF", green) { notification.showMessage("Filter AKTIF") }
+                ),
+                probeHistoryList
+            )
+        })
+
+        val split = HBox(10.0).apply {
+            children.addAll(leftColumn, rightColumn)
+            HBox.setHgrow(rightColumn, Priority.ALWAYS)
+        }
+
+        return scrollPage(VBox(10.0).apply {
+            children.addAll(
+                pageHeader("PROBE MODE", amber, "PROBE"),
+                split
             )
         })
     }
@@ -476,24 +499,72 @@ class RPhoneDesktopApp : Application() {
     private fun buildWaveIdPage(): Node {
         waveHistoryList = ListView(FXCollections.observableArrayList<String>()).apply {
             prefHeight = 180.0
+            style = controlStyle()
+        }
+
+        val leftPane = VBox(10.0).apply {
+            prefWidth = 420.0
+            children.addAll(
+                card("WAVEID", VBox(6.0).apply {
+                    children.addAll(
+                        label("∿ WAVEID", green, 40.0 / 2.0, true),
+                        label("Analisa & identifikasi arus boot smartphone", textSecondary, 12.0, false)
+                    )
+                }),
+                card("DATABASE", VBox(4.0).apply {
+                    children.addAll(
+                        label("149", green, 44.0, true),
+                        label("profil", textPrimary, 18.0, false)
+                    )
+                })
+            )
+        }
+
+        val tileGrid = GridPane().apply {
+            hgap = 10.0
+            vgap = 10.0
+            add(waveTile("🗂", "Rekam Baru", "Rekam arus boot HP") { sendCommand("WAVEID_REKAM") }, 0, 0)
+            add(waveTile("📁", "Database", "149 profil") { loadWaveFiles() }, 1, 0)
+            add(waveTile("◫", "Bandingkan", "Overlay 2 waveform") { notification.showMessage("Bandingkan dipetakan ke shell EXE") }, 0, 1)
+            add(waveTile("📥", "Import .rphp", "Tambah dari komunitas") { exportWaveLog() }, 1, 1)
+        }
+
+        val rightPane = VBox(10.0).apply {
+            children.addAll(
+                tileGrid,
+                card("Database / Riwayat", waveHistoryList)
+            )
+            HBox.setHgrow(this, Priority.ALWAYS)
+        }
+
+        val split = HBox(10.0).apply {
+            children.addAll(leftPane, rightPane)
+            HBox.setHgrow(rightPane, Priority.ALWAYS)
         }
 
         return scrollPage(VBox(10.0).apply {
             children.addAll(
-                pageHeader("WAVEID", green, "WAVE"),
-                card("WaveID Menu", VBox(8.0).apply {
-                    children.addAll(
-                        primaryActionButton("REKAM", green) { sendCommand("WAVEID_REKAM") },
-                        actionButtonsRow(
-                            secondaryActionButton("DATABASE", green) { loadWaveFiles() },
-                            secondaryActionButton("BANDINGKAN", green) { notification.showMessage("Bandingkan dipetakan ke shell EXE") },
-                            secondaryActionButton("BACKUP", green) { exportWaveLog() }
-                        )
-                    )
-                }),
-                card("Database / Riwayat", waveHistoryList)
+                pageHeader("WAVE ID", green, "WAVE ID"),
+                split
             )
         })
+    }
+
+    private fun waveTile(icon: String, title: String, subtitle: String, action: () -> Unit): Node {
+        return Button().apply {
+            maxWidth = Double.MAX_VALUE
+            prefHeight = 130.0
+            style = cardStyle()
+            graphic = VBox(4.0).apply {
+                alignment = Pos.CENTER
+                children.addAll(
+                    label(icon, textPrimary, 24.0, false),
+                    label(title, textPrimary, 24.0 / 1.5, true),
+                    label(subtitle, textSecondary, 11.0, false)
+                )
+            }
+            setOnAction { action() }
+        }
     }
 
     private fun buildUartPage(): Node {
