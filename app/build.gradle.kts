@@ -18,10 +18,18 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("C:/Users/Administrator/Documents/projectrphone/keystore/rphone_release.jks")
-            storePassword = "RPhone@V3#2025"
-            keyAlias = "rphone_key"
-            keyPassword = "RPhone@Key#2025"
+            // For CI/CD, use environment variables or files defined in ~/.gradle/gradle.properties
+            val keystorePath = System.getenv("KEYSTORE_PATH") ?: "release.keystore"
+            val keystorePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
+            val keyAlias = System.getenv("KEY_ALIAS") ?: "rphone_key"
+            val keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+            
+            if (keystorePassword.isNotEmpty()) {
+                storeFile = file(keystorePath)
+                storePassword = keystorePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            }
         }
     }
 
@@ -37,12 +45,12 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 
     kotlinOptions {
-        jvmTarget = "17"
+        jvmTarget = "21"
     }
 
     buildFeatures {

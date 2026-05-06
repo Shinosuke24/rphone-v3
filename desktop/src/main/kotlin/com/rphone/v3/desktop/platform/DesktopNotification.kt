@@ -26,11 +26,12 @@ class DesktopNotification : PlatformNotification {
     }
     
     override fun vibrate(milliseconds: Long) {
-        // Desktop doesn't have vibration, but we can emit a beep
+        // Desktop doesn't have vibration, but we can emit a system beep
         try {
-            Runtime.getRuntime().exec("rundll32 rundll32.exe,$milliseconds").waitFor()
+            // Use a simple beep via system.out (cross-platform)
+            print("\u0007") // Bell character
         } catch (e: Exception) {
-            // Silently fail on non-Windows or if rundll32 not available
+            logger.debug("Could not emit beep", e)
         }
     }
     
