@@ -135,7 +135,7 @@ class RPhoneDesktopApp : Application() {
         notification = PlatformProvider.getNotification()
 
         val root = BorderPane().apply {
-            style = "-fx-background-color: #050810;"
+            style = "-fx-background-color: linear-gradient(to bottom right, #050810, #070D18);"
             left = buildSidebar()
             center = buildMainArea()
         }
@@ -212,7 +212,7 @@ class RPhoneDesktopApp : Application() {
 
         val btPanel = VBox(8.0).apply {
             padding = Insets(8.0)
-            style = "-fx-background-color: #0D1423; -fx-border-color: #131D2E; -fx-border-width: 1;"
+            style = "-fx-background-color: linear-gradient(to bottom, #0D1423, #0B111D); -fx-border-color: #131D2E; -fx-border-width: 1; -fx-background-radius: 16; -fx-border-radius: 16;"
             children.addAll(
                 label("DEVICE", textSecondary, 10.0, true),
                 deviceCombo,
@@ -234,7 +234,7 @@ class RPhoneDesktopApp : Application() {
         return VBox(6.0).apply {
             prefWidth = 220.0
             padding = Insets(10.0)
-            style = "-fx-background-color: #080C14; -fx-border-color: transparent #0D1423 transparent transparent; -fx-border-width: 0 1 0 0;"
+            style = "-fx-background-color: linear-gradient(to bottom, #080C14, #060A12); -fx-border-color: transparent #0D1423 transparent transparent; -fx-border-width: 0 1 0 0;"
             children.addAll(header, nav, filler, bottomSpacer)
         }
     }
@@ -247,7 +247,7 @@ class RPhoneDesktopApp : Application() {
         val topRow = HBox(8.0).apply {
             padding = Insets(12.0, 12.0, 8.0, 12.0)
             alignment = Pos.CENTER_LEFT
-            style = "-fx-background-color: #050810;"
+            style = "-fx-background-color: transparent;"
             children.addAll(pageTitle, pageBadge, Region().apply { HBox.setHgrow(this, Priority.ALWAYS) }, clockLabel)
         }
 
@@ -271,7 +271,7 @@ class RPhoneDesktopApp : Application() {
 
     private fun buildUsbPage(): Node {
         usbMetricCurrent = metricValue("0.000", cyan)
-        usbMetricVoltage = metricValue("5.14", textPrimary)
+        usbMetricVoltage = metricValue("0.000", textPrimary)
         usbMetricPower = metricValue("0.00", cyan)
         usbMetricCapacity = metricValue("--", textSecondary)
         usbMetricDp = metricValue("0.00", cyan)
@@ -328,7 +328,7 @@ class RPhoneDesktopApp : Application() {
 
     private fun buildPsuPage(): Node {
         psuMetricCurrent = metricValue("0.000", purple)
-        psuMetricVoltage = metricValue("5.14", textPrimary)
+        psuMetricVoltage = metricValue("0.000", textPrimary)
         psuMetricPower = metricValue("0.00", purple)
         psuMetricCapacity = metricValue("--", textSecondary)
 
@@ -1044,9 +1044,11 @@ class RPhoneDesktopApp : Application() {
 
     private fun cardStyle(): String {
         return """
-            -fx-background-color: #0D1423;
+            -fx-background-color: linear-gradient(to bottom, #0D1423, #0B111D);
             -fx-border-color: #131D2E;
             -fx-border-width: 1;
+            -fx-background-radius: 18;
+            -fx-border-radius: 18;
         """.trimIndent()
     }
 
@@ -1056,6 +1058,8 @@ class RPhoneDesktopApp : Application() {
             -fx-text-fill: #E2E8F0;
             -fx-border-color: #131D2E;
             -fx-border-width: 1;
+            -fx-background-radius: 14;
+            -fx-border-radius: 14;
         """.trimIndent()
     }
 
@@ -1072,21 +1076,23 @@ class RPhoneDesktopApp : Application() {
             -fx-text-fill: #E2E8F0;
             -fx-border-color: #131D2E;
             -fx-border-width: 1;
+            -fx-background-radius: 14;
+            -fx-border-radius: 14;
         """.trimIndent()
     }
 
     private fun navStyle(active: Boolean, accent: Color): String {
         return if (active) {
             """
-                -fx-background-color: #101827;
+                -fx-background-color: linear-gradient(to right, #111827, #0F172A);
                 -fx-text-fill: ${accent.toHex()};
                 -fx-border-color: ${accent.toHex()}33;
                 -fx-border-width: 1;
                 -fx-font-size: 12px;
                 -fx-font-weight: bold;
                 -fx-padding: 10 12 10 12;
-                -fx-background-radius: 0;
-                -fx-border-radius: 0;
+                -fx-background-radius: 14;
+                -fx-border-radius: 14;
             """.trimIndent()
         } else {
             """
@@ -1096,8 +1102,8 @@ class RPhoneDesktopApp : Application() {
                 -fx-font-size: 12px;
                 -fx-font-weight: bold;
                 -fx-padding: 10 12 10 12;
-                -fx-background-radius: 0;
-                -fx-border-radius: 0;
+                -fx-background-radius: 14;
+                -fx-border-radius: 14;
             """.trimIndent()
         }
     }
@@ -1105,13 +1111,15 @@ class RPhoneDesktopApp : Application() {
     private fun tabStyle(accent: Color, active: Boolean): String {
         return if (active) {
             """
-                -fx-background-color: #101827;
+                -fx-background-color: linear-gradient(to right, #101827, #0F172A);
                 -fx-text-fill: ${accent.toHex()};
                 -fx-border-color: ${accent.toHex()}33;
                 -fx-border-width: 1;
                 -fx-font-size: 10px;
                 -fx-font-weight: bold;
                 -fx-padding: 6 14 6 14;
+                -fx-background-radius: 12;
+                -fx-border-radius: 12;
             """.trimIndent()
         } else {
             """
@@ -1122,6 +1130,8 @@ class RPhoneDesktopApp : Application() {
                 -fx-font-size: 10px;
                 -fx-font-weight: bold;
                 -fx-padding: 6 14 6 14;
+                -fx-background-radius: 12;
+                -fx-border-radius: 12;
             """.trimIndent()
         }
     }
@@ -1132,8 +1142,8 @@ class RPhoneDesktopApp : Application() {
             -fx-text-fill: $textColor;
             -fx-border-color: ${accent.toHex()};
             -fx-border-width: 1;
-            -fx-background-radius: 0;
-            -fx-border-radius: 0;
+            -fx-background-radius: 16;
+            -fx-border-radius: 16;
             -fx-font-size: 11px;
             -fx-font-weight: bold;
             -fx-padding: 8 12 8 12;
@@ -1172,24 +1182,24 @@ class RPhoneDesktopApp : Application() {
 
     private fun pill(text: String, accent: Color): Label {
         return Label(text).apply {
-            style = "-fx-text-fill: ${accent.toHex()}; -fx-font-size: 10px; -fx-font-weight: bold; -fx-padding: 3 8 3 8; -fx-background-color: #101827; -fx-border-color: ${accent.toHex()}33; -fx-border-width: 1;"
+            style = "-fx-text-fill: ${accent.toHex()}; -fx-font-size: 10px; -fx-font-weight: bold; -fx-padding: 3 8 3 8; -fx-background-color: linear-gradient(to right, #101827, #0F172A); -fx-border-color: ${accent.toHex()}33; -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12;"
         }
     }
 
     private fun chip(text: String, accent: Color): Label {
         return Label(text).apply {
-            style = "-fx-text-fill: ${accent.toHex()}; -fx-font-size: 10px; -fx-font-weight: bold; -fx-padding: 5 10 5 10; -fx-background-color: #111827; -fx-border-color: ${accent.toHex()}33; -fx-border-width: 1;"
+            style = "-fx-text-fill: ${accent.toHex()}; -fx-font-size: 10px; -fx-font-weight: bold; -fx-padding: 5 10 5 10; -fx-background-color: linear-gradient(to right, #111827, #0F172A); -fx-border-color: ${accent.toHex()}33; -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12;"
         }
     }
 
     private fun badgeStyle(accent: Color): String {
-        return "-fx-text-fill: ${accent.toHex()}; -fx-font-size: 10px; -fx-font-weight: bold; -fx-padding: 3 10 3 10; -fx-background-color: #101827; -fx-border-color: ${accent.toHex()}33; -fx-border-width: 1;"
+        return "-fx-text-fill: ${accent.toHex()}; -fx-font-size: 10px; -fx-font-weight: bold; -fx-padding: 3 10 3 10; -fx-background-color: linear-gradient(to right, #101827, #0F172A); -fx-border-color: ${accent.toHex()}33; -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12;"
     }
 
     private fun labeledMiniValue(title: String, value: Label): Node {
         return VBox(2.0).apply {
             padding = Insets(6.0)
-            style = "-fx-background-color: #0D1423; -fx-border-color: #131D2E; -fx-border-width: 1;"
+            style = "-fx-background-color: linear-gradient(to bottom, #0D1423, #0B111D); -fx-border-color: #131D2E; -fx-border-width: 1; -fx-background-radius: 14; -fx-border-radius: 14;"
             children.addAll(label(title, muted, 10.0, true), value)
         }
     }
