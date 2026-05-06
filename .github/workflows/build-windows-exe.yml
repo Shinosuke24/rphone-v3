@@ -55,18 +55,25 @@ jobs:
       - name: Prepare artifact folder
         shell: pwsh
         run: |
-          # Verify runtime and EXE exist before copying
+          # Verify runtime, EXE, and shadow JAR exist before copying
           if (!(Test-Path "desktop\build\java-runtime")) {
             throw "ERROR: Bundled runtime not found at desktop\build\java-runtime"
           }
-          if (!(Test-Path "desktop\build\launch4j")) {
-            throw "ERROR: launch4j output not found at desktop\build\launch4j"
+          if (!(Test-Path "desktop\build\launch4j\rphone-v3-desktop.exe")) {
+            throw "ERROR: EXE not found at desktop\build\launch4j\rphone-v3-desktop.exe"
+          }
+          if (!(Test-Path "desktop\build\libs\desktop-all.jar")) {
+            throw "ERROR: Shadow JAR not found at desktop\build\libs\desktop-all.jar"
           }
 
           New-Item -ItemType Directory -Force -Path out | Out-Null
-          Copy-Item -Recurse -Force desktop\build\launch4j out\launch4j
+          # Copy EXE to root
+          Copy-Item -Force desktop\build\launch4j\rphone-v3-desktop.exe out\rphone-v3-desktop.exe
+          # Copy JAR to root (same directory as EXE)
+          Copy-Item -Force desktop\build\libs\desktop-all.jar out\desktop-all.jar
+          # Copy JRE to root
           Copy-Item -Recurse -Force desktop\build\java-runtime out\jre
-          Write-Host "Artifact prepared: EXE + bundled Java runtime"
+          Write-Host "Artifact prepared: EXE + JAR + bundled Java runtime"
 
       - name: Create Windows zip package
         shell: pwsh
@@ -75,8 +82,8 @@ jobs:
           if (Test-Path $zipPath) {
             Remove-Item $zipPath -Force
           }
-          # Include both EXE and bundled JRE at root level of zip
-          Compress-Archive -Path out\launch4j\rphone-v3-desktop.exe, out\jre -DestinationPath $zipPath
+          # Include EXE, JAR, and JRE at root level of zip
+          Compress-Archive -Path out\rphone-v3-desktop.exe, out\desktop-all.jar, out\jre -DestinationPath $zipPath
 
       - name: Upload Windows EXE package
         uses: actions/upload-artifact@v4

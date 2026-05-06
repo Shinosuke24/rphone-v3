@@ -2,6 +2,7 @@ plugins {
     kotlin("jvm")
     application
     id("edu.sc.seis.launch4j") version "3.0.6"
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 java {
@@ -49,14 +50,15 @@ tasks.named<JavaExec>("run") {
 }
 
 tasks.named("createExe") {
-    dependsOn("jar")
+    dependsOn("shadowJar")
 }
 
 launch4j {
     outfile = "rphone-v3-desktop.exe"
     mainClassName = "com.rphone.v3.desktop.MainKt"
+    jarLocation = "desktop-all.jar"
     // Use bundled Java runtime from jlink output (relative to EXE)
     bundledJrePath = "jre"
     headerType = "gui"
-    jvmOptions = listOf("-Xms128m", "-Xmx1024m")
+    jvmOptions = listOf("-Xms128m", "-Xmx1024m", "-Dfile.encoding=UTF-8")
 }
