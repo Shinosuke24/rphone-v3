@@ -28,8 +28,16 @@ jobs:
       - name: Build bundled Java runtime
         shell: pwsh
         run: |
-          Write-Host "Skipping jlink runtime for now - will use system Java"
-          # TODO: Implement proper jlink runtime creation in future iterations
+          $runtimeDir = "desktop\build\java-runtime"
+          New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
+          & "$env:JAVA_HOME\bin\jlink.exe" `
+            --add-modules java.base,java.desktop,java.logging,java.management,java.naming,java.sql,java.xml `
+            --strip-debug `
+            --no-header-files `
+            --no-man-pages `
+            --compress=2 `
+            --output $runtimeDir
+          Write-Host "Java runtime bundled successfully at $runtimeDir"
 
       - name: Build desktop EXE
         shell: pwsh
@@ -40,6 +48,8 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path out | Out-Null
           Copy-Item -Recurse -Force desktop\build\launch4j out\launch4j
+          Copy-Item -Recurse -Force desktop\build\java-runtime out\jre
+          Write-Host "Artifact prepared: EXE + bundled Java runtime"
 
       - name: Create Windows zip package
         shell: pwsh
@@ -48,7 +58,8 @@ jobs:
           if (Test-Path $zipPath) {
             Remove-Item $zipPath -Force
           }
-          Compress-Archive -Path out\launch4j\* -DestinationPath $zipPath
+          # Include both EXE and bundled JRE at root level of zip
+          Compress-Archive -Path out\launch4j\rphone-v3-desktop.exe, out\jre -DestinationPath $zipPath
 
       - name: Upload Windows EXE package
         uses: actions/upload-artifact@v4

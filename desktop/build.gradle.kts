@@ -55,8 +55,8 @@ tasks.named("createExe") {
 launch4j {
     outfile = "rphone-v3-desktop.exe"
     mainClassName = "com.rphone.v3.desktop.MainKt"
-    // Use system Java via JAVA_HOME or registry lookup
-    bundledJrePath = "%JAVA_HOME%"
+    // Use bundled Java runtime from jlink output (relative to EXE)
+    bundledJrePath = "jre"
     headerType = "gui"
     jvmOptions = listOf("-Xms128m", "-Xmx1024m")
 }
