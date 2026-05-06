@@ -530,7 +530,7 @@ class RPhoneDesktopApp : Application() {
             vgap = 10.0
             add(waveTile("🗂", "Rekam Baru", "Rekam arus boot HP") { recordWaveProfile() }, 0, 0)
             add(waveTile("📁", "Database", "Lihat profil tersimpan") { loadWaveFiles() }, 1, 0)
-            add(waveTile("◫", "Bandingkan", "Overlay 2 waveform") { notification.showMessage("Bandingkan dipetakan ke shell EXE") }, 0, 1)
+            add(waveTile("◫", "Bandingkan", "Overlay 2 waveform") { compareLatestWaveProfiles() }, 0, 1)
             add(waveTile("📥", "Import .rphp", "Tambah dari komunitas") { importWaveLog() }, 1, 1)
         }
 
@@ -1153,6 +1153,65 @@ class RPhoneDesktopApp : Application() {
                 settingsStatus.text = "Loaded ${files.size} files from storage"
             }
         }
+    }
+
+    private fun compareLatestWaveProfiles() {
+        scope.launch {
+            val waveFiles = storage.listFiles()
+                .filter { it.endsWith(".rphp", true) }
+                .sortedDescending()
+
+            if (waveFiles.size < 2) {
+                withContext(Dispatchers.Main) {
+                    notification.showError("Butuh minimal 2 file .rphp untuk compare")
+                    waveHistoryList.items.setAll(waveFiles)
+                }
+                return@launch
+            }
+
+            val first = waveFiles[0]
+            val second = waveFiles[1]
+            val firstData = storage.load(first).orEmpty()
+            val secondData = storage.load(second).orEmpty()
+            val firstSamples = extractNumericSamples(firstData)
+            val secondSamples = extractNumericSamples(secondData)
+            val sampleCount = minOf(firstSamples.size, secondSamples.size)
+
+            if (sampleCount == 0) {
+                withContext(Dispatchers.Main) {
+                    notification.showError("Data numerik tidak ditemukan untuk compare")
+                }
+                return@launch
+            }
+
+            var mae = 0.0
+            for (i in 0 until sampleCount) {
+                mae += kotlin.math.abs(firstSamples[i] - secondSamples[i])
+            }
+            mae /= sampleCount
+            val similarity = (100.0 - (mae * 10.0)).coerceIn(0.0, 100.0)
+
+            withContext(Dispatchers.Main) {
+                waveHistoryList.items.setAll(
+                    listOf(
+                        "COMPARE RESULT",
+                        "A: $first",
+                        "B: $second",
+                        "Samples: $sampleCount",
+                        "MAE: ${formatNumber(mae, 3)}",
+                        "Similarity: ${formatNumber(similarity, 1)}%"
+                    )
+                )
+                notification.showSuccess("Compare selesai: ${formatNumber(similarity, 1)}% mirip")
+            }
+        }
+    }
+
+    private fun extractNumericSamples(text: String): List<Double> {
+        return Regex("[-+]?[0-9]*\\.?[0-9]+")
+            .findAll(text)
+            .mapNotNull { it.value.toDoubleOrNull() }
+            .toList()
     }
 
     private fun refreshFileLists() {
