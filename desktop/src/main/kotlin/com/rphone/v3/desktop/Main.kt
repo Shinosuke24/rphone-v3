@@ -45,6 +45,7 @@ import javafx.util.StringConverter
 import javafx.animation.KeyFrame
 import javafx.animation.Timeline
 import javafx.util.Duration
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -81,6 +82,7 @@ class RPhoneDesktopApp : Application() {
     private lateinit var uartFileList: ListView<String>
     private lateinit var probeHistoryList: ListView<String>
     private lateinit var waveHistoryList: ListView<String>
+    private lateinit var waveDbCountLabel: Label
     private lateinit var usbMetricCurrent: Label
     private lateinit var usbMetricVoltage: Label
     private lateinit var usbMetricPower: Label
@@ -512,8 +514,9 @@ class RPhoneDesktopApp : Application() {
                     )
                 }),
                 card("DATABASE", VBox(4.0).apply {
+                    waveDbCountLabel = label("0", green, 44.0, true)
                     children.addAll(
-                        label("149", green, 44.0, true),
+                        waveDbCountLabel,
                         label("profil", textPrimary, 18.0, false)
                     )
                 })
@@ -523,10 +526,10 @@ class RPhoneDesktopApp : Application() {
         val tileGrid = GridPane().apply {
             hgap = 10.0
             vgap = 10.0
-            add(waveTile("🗂", "Rekam Baru", "Rekam arus boot HP") { sendCommand("WAVEID_REKAM") }, 0, 0)
+            add(waveTile("🗂", "Rekam Baru", "Rekam arus boot HP") { recordWaveProfile() }, 0, 0)
             add(waveTile("📁", "Database", "149 profil") { loadWaveFiles() }, 1, 0)
             add(waveTile("◫", "Bandingkan", "Overlay 2 waveform") { notification.showMessage("Bandingkan dipetakan ke shell EXE") }, 0, 1)
-            add(waveTile("📥", "Import .rphp", "Tambah dari komunitas") { exportWaveLog() }, 1, 1)
+            add(waveTile("📥", "Import .rphp", "Tambah dari komunitas") { importWaveLog() }, 1, 1)
         }
 
         val rightPane = VBox(10.0).apply {
@@ -1054,6 +1057,37 @@ class RPhoneDesktopApp : Application() {
         }
     }
 
+    private fun importWaveLog() {
+        scope.launch {
+            val downloads = File(System.getProperty("user.home"), "Downloads")
+            val matches = downloads.listFiles { f -> f.isFile && f.extension.equals("rphp", true) }?.toList() ?: emptyList()
+            if (matches.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    notification.showMessage("No .rphp files found in Downloads to import")
+                }
+                return@launch
+            }
+            var imported = 0
+            for (f in matches) {
+                try {
+                    val content = f.readText()
+                    val ok = storage.save(f.name, content)
+                    if (ok) imported++
+                } catch (e: Exception) {
+                    // ignore individual failures
+                }
+            }
+            withContext(Dispatchers.Main) {
+                if (imported > 0) {
+                    notification.showSuccess("Imported $imported .rphp files")
+                    refreshFileLists()
+                } else {
+                    notification.showError("No files imported")
+                }
+            }
+        }
+    }
+
     private fun saveUartLog() {
         scope.launch {
             val filename = "uart-log-${LocalTime.now().format(DateTimeFormatter.ofPattern("HHmmss"))}.txt"
@@ -1131,23 +1165,33 @@ class RPhoneDesktopApp : Application() {
             val x = padding + (usableWidth / 12.0) * i
             gc.strokeLine(x, padding, x, height - padding)
         }
+        // If there's no serial data yet, show a flat baseline near the bottom
+        val hasData = receiveBuffer.isNotEmpty() || lastKnownValue != 0.0
+        val baseY = if (hasData) height * 0.72 else (height - padding - 6.0)
+
         gc.stroke = accent
         gc.lineWidth = 3.0
-        gc.beginPath()
-        val baseY = height * 0.72
-        for (i in 0..160) {
-            val x = padding + usableWidth * (i / 160.0)
-            val wave = kotlin.math.sin(i / 12.0) * 16.0 + kotlin.math.cos(i / 4.5) * 7.0
-            val y = (baseY - wave).coerceIn(padding, height - padding)
-            if (i == 0) gc.moveTo(x, y) else gc.lineTo(x, y)
+        if (hasData) {
+            gc.beginPath()
+            for (i in 0..160) {
+                val x = padding + usableWidth * (i / 160.0)
+                val wave = kotlin.math.sin(i / 12.0) * 16.0 + kotlin.math.cos(i / 4.5) * 7.0
+                val y = (baseY - wave).coerceIn(padding, height - padding)
+                if (i == 0) gc.moveTo(x, y) else gc.lineTo(x, y)
+            }
+            gc.stroke()
+            gc.stroke = accent
+            gc.lineWidth = 2.0
+            gc.strokeLine(padding, baseY, width - padding, baseY)
+            gc.stroke = purple
+            gc.lineWidth = 1.2
+            gc.strokeLine(padding, height * 0.45, width - padding, height * 0.45)
+        } else {
+            // idle -> draw a subtle baseline at the bottom
+            gc.globalAlpha = 0.9
+            gc.strokeLine(padding, baseY, width - padding, baseY)
+            gc.globalAlpha = 1.0
         }
-        gc.stroke()
-        gc.stroke = accent
-        gc.lineWidth = 2.0
-        gc.strokeLine(padding, baseY, width - padding, baseY)
-        gc.stroke = purple
-        gc.lineWidth = 1.2
-        gc.strokeLine(padding, height * 0.45, width - padding, height * 0.45)
     }
 
     private fun cardStyle(): String {
