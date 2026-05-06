@@ -25,6 +25,10 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
+      - name: Build desktop EXE
+        shell: pwsh
+        run: .\gradlew.bat :desktop:clean :desktop:createExe :desktop:installDist
+
       - name: Build bundled Java runtime
         shell: pwsh
         run: |
@@ -48,13 +52,17 @@ jobs:
 
           Write-Host "Java runtime bundled successfully at $runtimeDir"
 
-      - name: Build desktop EXE
-        shell: pwsh
-        run: .\gradlew.bat :desktop:clean :desktop:createExe :desktop:installDist
-
       - name: Prepare artifact folder
         shell: pwsh
         run: |
+          # Verify runtime and EXE exist before copying
+          if (!(Test-Path "desktop\build\java-runtime")) {
+            throw "ERROR: Bundled runtime not found at desktop\build\java-runtime"
+          }
+          if (!(Test-Path "desktop\build\launch4j")) {
+            throw "ERROR: launch4j output not found at desktop\build\launch4j"
+          }
+
           New-Item -ItemType Directory -Force -Path out | Out-Null
           Copy-Item -Recurse -Force desktop\build\launch4j out\launch4j
           Copy-Item -Recurse -Force desktop\build\java-runtime out\jre
