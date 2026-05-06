@@ -6,6 +6,7 @@ plugins {
 }
 
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import edu.sc.seis.launch4j.Launch4jPluginExtension
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21
@@ -59,16 +60,13 @@ tasks.named<ShadowJar>("shadowJar") {
     archiveFileName.set("desktop-all.jar")
 }
 
-launch4j {
+configure<Launch4jPluginExtension> {
     outfile = "rphone-v3-desktop.exe"
     mainClassName = "com.rphone.v3.desktop.MainKt"
-    
-    // Point Launch4j at the shadowJar output file
-    val shadowJarPath = tasks.named<ShadowJar>("shadowJar")
-        .flatMap { it.archiveFile }
-        .map { it.asFile.absolutePath }
-    jar = shadowJarPath.get()
-    
+
+    // Point Launch4j at the shadowJar output task
+    setJarTask(tasks.named("shadowJar"))
+
     // Use bundled Java runtime from jlink output (relative to EXE)
     bundledJrePath = "jre"
     headerType = "gui"
