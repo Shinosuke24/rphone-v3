@@ -1122,6 +1122,7 @@ class RPhoneDesktopApp : Application() {
             val files = storage.listFiles()
             withContext(Dispatchers.Main) {
                 waveHistoryList.items.setAll(files)
+                waveDbCountLabel.text = files.count { it.endsWith(".rphp", true) }.toString()
                 settingsStatus.text = "Loaded ${files.size} files from storage"
             }
         }
@@ -1134,6 +1135,30 @@ class RPhoneDesktopApp : Application() {
                 uartFileList.items.setAll(files)
                 probeHistoryList.items.setAll(files.filter { it.contains("probe", true) })
                 waveHistoryList.items.setAll(files)
+                waveDbCountLabel.text = files.count { it.endsWith(".rphp", true) }.toString()
+            }
+        }
+    }
+
+    private fun recordWaveProfile() {
+        scope.launch {
+            val filename = "wave-${LocalTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))}.rphp"
+            val data = buildString {
+                appendLine("R-Phone V3 WaveID Profile")
+                appendLine("Time: ${LocalTime.now()}")
+                appendLine("Generated: desktop sample capture")
+                appendLine()
+                appendLine("--raw--")
+                append(receiveBuffer.toString())
+            }
+            val ok = storage.save(filename, data)
+            withContext(Dispatchers.Main) {
+                if (ok) {
+                    notification.showSuccess("Profile tersimpan: $filename")
+                    refreshFileLists()
+                } else {
+                    notification.showError("Gagal menyimpan profile")
+                }
             }
         }
     }
