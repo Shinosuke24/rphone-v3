@@ -29,11 +29,15 @@ jobs:
         shell: pwsh
         run: |
           $runtimeDir = "desktop\build\java-runtime"
-          # Clean up any existing runtime directory
+
+          # Ensure output dir does NOT exist; jlink requires this
           if (Test-Path $runtimeDir) {
             Remove-Item -Recurse -Force $runtimeDir
           }
-          New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
+
+          # Only create parent directory; let jlink create the final output directory
+          New-Item -ItemType Directory -Force -Path (Split-Path $runtimeDir -Parent) | Out-Null
+
           & "$env:JAVA_HOME\bin\jlink.exe" `
             --add-modules java.base,java.desktop,java.logging,java.management,java.naming,java.sql,java.xml `
             --strip-debug `
@@ -41,6 +45,7 @@ jobs:
             --no-man-pages `
             --compress=2 `
             --output $runtimeDir
+
           Write-Host "Java runtime bundled successfully at $runtimeDir"
 
       - name: Build desktop EXE
