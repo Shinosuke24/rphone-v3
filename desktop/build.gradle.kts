@@ -64,7 +64,7 @@ launch4j {
     mainClassName = "com.rphone.v3.desktop.MainKt"
     
     // Use shadow JAR output with all dependencies bundled
-    jar = tasks.named<ShadowJar>("shadowJar").flatMap { it.archiveFile }.get().asFile.absolutePath
+    jar = tasks.named<ShadowJar>("shadowJar").get().archiveFile.get().asFile.absolutePath
     
     // Use bundled Java runtime from jlink output (relative to EXE)
     bundledJrePath = "jre"
