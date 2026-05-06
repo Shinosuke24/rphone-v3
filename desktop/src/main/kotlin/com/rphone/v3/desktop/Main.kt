@@ -18,6 +18,7 @@ import javafx.scene.Node
 import javafx.scene.Scene
 import javafx.scene.canvas.Canvas
 import javafx.scene.canvas.GraphicsContext
+import javafx.scene.control.ContentDisplay
 import javafx.scene.control.Button
 import javafx.scene.control.ComboBox
 import javafx.scene.control.Label
@@ -41,6 +42,9 @@ import javafx.scene.paint.Color
 import javafx.scene.text.Font
 import javafx.stage.Stage
 import javafx.util.StringConverter
+import javafx.animation.KeyFrame
+import javafx.animation.Timeline
+import javafx.util.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -170,12 +174,12 @@ class RPhoneDesktopApp : Application() {
         }
 
         val nav = VBox(2.0)
-        navButtons[DesktopPage.USB] = navButton("USB", cyan) { selectPage(DesktopPage.USB) }
-        navButtons[DesktopPage.PSU] = navButton("PSU", purple) { selectPage(DesktopPage.PSU) }
-        navButtons[DesktopPage.PROBE] = navButton("PROBE", amber) { selectPage(DesktopPage.PROBE) }
-        navButtons[DesktopPage.WAVEID] = navButton("WAVE", green) { selectPage(DesktopPage.WAVEID) }
-        navButtons[DesktopPage.UART] = navButton("UART", Color.web("#14B8A6")) { selectPage(DesktopPage.UART) }
-        navButtons[DesktopPage.SETTINGS] = navButton("SET", textSecondary) { selectPage(DesktopPage.SETTINGS) }
+        navButtons[DesktopPage.USB] = navButton("⌁ USB", cyan) { selectPage(DesktopPage.USB) }
+        navButtons[DesktopPage.PSU] = navButton("⚡ PSU", purple) { selectPage(DesktopPage.PSU) }
+        navButtons[DesktopPage.PROBE] = navButton("◈ PROBE", amber) { selectPage(DesktopPage.PROBE) }
+        navButtons[DesktopPage.WAVEID] = navButton("∿ WAVE", green) { selectPage(DesktopPage.WAVEID) }
+        navButtons[DesktopPage.UART] = navButton("⌲ UART", Color.web("#14B8A6")) { selectPage(DesktopPage.UART) }
+        navButtons[DesktopPage.SETTINGS] = navButton("⚙ SET", textSecondary) { selectPage(DesktopPage.SETTINGS) }
         navButtons.values.forEach { nav.children.add(it) }
 
         val filler = Region().apply {
@@ -315,13 +319,24 @@ class RPhoneDesktopApp : Application() {
             )
         })
 
+        val leftColumn = VBox(10.0).apply {
+            prefWidth = 360.0
+            children.addAll(
+                connectionCard("USB DEVICE", cyan),
+                card("USB Metrics", metrics),
+                actionPanel
+            )
+        }
+
+        val topSplit = HBox(10.0).apply {
+            children.addAll(leftColumn, chartCard)
+            HBox.setHgrow(chartCard, Priority.ALWAYS)
+        }
+
         return scrollPage(VBox(10.0).apply {
             children.addAll(
                 header,
-                connectionCard("USB DEVICE", cyan),
-                metrics,
-                actionPanel,
-                chartCard
+                topSplit
             )
         })
     }
@@ -362,30 +377,43 @@ class RPhoneDesktopApp : Application() {
             children.addAll(pwmToggle, pwmSlider, ocpToggle, ocpSlider)
         })
 
-        return scrollPage(VBox(10.0).apply {
+        val leftColumn = VBox(10.0).apply {
+            prefWidth = 360.0
             children.addAll(
-                pageHeader("PSU MODE", purple, "SET_MODE_PSU"),
-                metricsPanel(
+                card("PSU Metrics", metricsPanel(
                     listOf(
                         Triple("ARUS", psuMetricCurrent, "A"),
                         Triple("TEGANGAN", psuMetricVoltage, "V"),
                         Triple("DAYA", psuMetricPower, "W"),
                         Triple("KAPASITAS", psuMetricCapacity, "mAh")
                     )
-                ),
+                )),
                 settingsPanel,
-                card("Measurement Results", VBox(8.0).apply {
-                    children.addAll(
-                        tabBar(purple, listOf("ARUS", "VOLT", "DAYA", "ALL")),
-                        chartPanel(psuChartCanvas),
-                        chartFooter(purple)
-                    )
-                }),
                 actionButtonsRow(
                     primaryActionButton("MULAI ANALISA", purple) { sendCommands("SET_MODE_PSU", "BUZZ_MULAI_ANALISA") },
                     secondaryActionButton("STOP ANALISA", red) { sendCommand("BUZZ_STOP_ANALISA") },
                     secondaryActionButton("LIHAT DETAIL ↗", textPrimary) { notification.showMessage("Detail view diwakili oleh shell EXE") }
                 )
+            )
+        }
+
+        val rightColumn = card("Measurement Results", VBox(8.0).apply {
+            children.addAll(
+                tabBar(purple, listOf("ARUS", "VOLT", "DAYA", "ALL")),
+                chartPanel(psuChartCanvas),
+                chartFooter(purple)
+            )
+        })
+
+        val topSplit = HBox(10.0).apply {
+            children.addAll(leftColumn, rightColumn)
+            HBox.setHgrow(rightColumn, Priority.ALWAYS)
+        }
+
+        return scrollPage(VBox(10.0).apply {
+            children.addAll(
+                pageHeader("PSU MODE", purple, "SET_MODE_PSU"),
+                topSplit
             )
         })
     }
@@ -645,6 +673,10 @@ class RPhoneDesktopApp : Application() {
         }
         canvas.widthProperty().bind(wrapper.widthProperty())
         canvas.heightProperty().bind(wrapper.heightProperty())
+        Platform.runLater {
+            val accent = if (canvas == psuChartCanvas) purple else cyan
+            drawWaveform(canvas.graphicsContext2D, canvas.width, canvas.height, accent)
+        }
         return wrapper
     }
 
@@ -700,6 +732,7 @@ class RPhoneDesktopApp : Application() {
     }
 
     private fun scrollPage(content: VBox): Node {
+        content.style = "-fx-background-color: transparent;"
         return javafx.scene.control.ScrollPane(content).apply {
             isFitToWidth = true
             hbarPolicy = javafx.scene.control.ScrollPane.ScrollBarPolicy.NEVER
@@ -712,6 +745,7 @@ class RPhoneDesktopApp : Application() {
         return Button(text).apply {
             maxWidth = Double.MAX_VALUE
             alignment = Pos.CENTER_LEFT
+            contentDisplay = ContentDisplay.LEFT
             style = navStyle(false, muted)
             setOnAction { action() }
         }
@@ -889,7 +923,7 @@ class RPhoneDesktopApp : Application() {
         usbMetricDp.text = formatNumber(lastKnownValue / 2.0, 2)
         usbMetricDm.text = formatNumber(lastKnownValue / 3.0, 2)
         psuMetricCurrent.text = formatNumber(lastKnownValue / 2.5, 3)
-        psuMetricVoltage.text = formatNumber(5.0 + (lastKnownValue / 10.0), 2)
+        psuMetricVoltage.text = formatNumber(lastKnownValue / 10.0, 3)
         psuMetricPower.text = formatNumber(lastKnownValue / 1.5, 2)
         probeValue.text = formatNumber(lastKnownValue, 3)
         probeModeLabel.text = if (text.contains("OHM", true)) {
@@ -1000,13 +1034,13 @@ class RPhoneDesktopApp : Application() {
     }
 
     private fun startClock() {
-        val updater = object : Runnable {
-            override fun run() {
+        val timer = Timeline(
+            KeyFrame(Duration.seconds(1.0), {
                 clockLabel.text = LocalTime.now().format(timeFormatter)
-                Platform.runLater(this)
-            }
-        }
-        Platform.runLater(updater)
+            })
+        )
+        timer.cycleCount = Timeline.INDEFINITE
+        timer.play()
     }
 
     private fun drawWaveform(gc: GraphicsContext, width: Double, height: Double, accent: Color) {
@@ -1037,6 +1071,9 @@ class RPhoneDesktopApp : Application() {
             if (i == 0) gc.moveTo(x, y) else gc.lineTo(x, y)
         }
         gc.stroke()
+        gc.stroke = accent
+        gc.lineWidth = 2.0
+        gc.strokeLine(padding, baseY, width - padding, baseY)
         gc.stroke = purple
         gc.lineWidth = 1.2
         gc.strokeLine(padding, height * 0.45, width - padding, height * 0.45)
@@ -1066,6 +1103,7 @@ class RPhoneDesktopApp : Application() {
     private fun scrollStyle(): String {
         return """
             -fx-background-color: transparent;
+            -fx-background: transparent;
             -fx-border-color: transparent;
         """.trimIndent()
     }
