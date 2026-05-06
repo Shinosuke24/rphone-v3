@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">R-Phone V3</string>
+
+    <!-- Navigation -->
+    <string name="nav_usb">USB Mode</string>
+    <string name="nav_psu">PSU Mode</string>
+    <string name="nav_waveid">WaveID</string>
+    <string name="nav_settings">Pengaturan</string>
+
+    <!-- USB Mode -->
+    <string name="label_arus_input">ARUS INPUT</string>
+    <string name="label_tegangan_input">TEGANGAN INPUT</string>
+    <string name="label_daya_aktif">DAYA AKTIF</string>
+    <string name="label_terpakai">TERPAKAI</string>
+    <string name="label_dp">D+</string>
+    <string name="label_dm">D-</string>
+    <string name="label_protokol">PROTOKOL</string>
+
+    <!-- PSU Mode -->
+    <string name="label_arus_output">ARUS OUTPUT</string>
+    <string name="label_tegangan_output">TEGANGAN OUTPUT</string>
+    <string name="label_daya_output">DAYA</string>
+
+    <!-- Waveform -->
+    <string name="tab_arus">ARUS</string>
+    <string name="tab_volt">VOLT</string>
+    <string name="tab_daya">DAYA</string>
+    <string name="tab_all">ALL</string>
+    <string name="label_peak">PEAK</string>
+    <string name="label_avg">AVG</string>
+    <string name="label_min">MIN</string>
+    <string name="btn_reset">Reset</string>
+    <string name="btn_pause">Jeda</string>
+
+    <!-- Status -->
+    <string name="status_terhubung">TERHUBUNG</string>
+    <string name="status_terputus">TERPUTUS</string>
+    <string name="status_menghubungkan">Menghubungkan...</string>
+    <string name="status_unknown">UNKNOWN</string>
+
+    <!-- WaveID -->
+    <string name="waveid_title">〰 WAVEID</string>
+    <string name="waveid_subtitle">Analisa &amp; identifikasi arus boot HP</string>
+    <string name="menu_rekam">Rekam Baru</string>
+    <string name="menu_database">Database</string>
+    <string name="menu_bandingkan">Bandingkan</string>
+    <string name="menu_import">Import .rphp</string>
+    <string name="rekam_siap">SIAP REKAM</string>
+    <string name="rekam_bersiap">Menunggu perangkat dinyalakan...</string>
+    <string name="rekam_mulai">● MEREKAM</string>
+    <string name="rekam_selesai">✓ Rekaman Selesai</string>
+    <string name="rekam_batal">BATAL</string>
+    <string name="rekam_jeda">JEDA</string>
+    <string name="rekam_stop">SELESAI</string>
+    <string name="label_brand">Brand</string>
+    <string name="label_model">Model</string>
+    <string name="label_kondisi">Kondisi</string>
+    <string name="label_username">Username</string>
+    <string name="hint_brand">Contoh: Realme</string>
+    <string name="hint_model">Contoh: C2</string>
+    <string name="hint_kondisi">Contoh: Bootloop, Normal, Short</string>
+    <string name="hint_username">Nama teknisi</string>
+    <string name="btn_simpan">SIMPAN</string>
+    <string name="btn_batal">BATAL</string>
+    <string name="btn_export">EXPORT .rphp</string>
+    <string name="btn_bagikan">BAGIKAN</string>
+    <string name="btn_hapus">HAPUS</string>
+    <string name="label_sangat_mirip">Sangat Mirip</string>
+    <string name="label_kemungkinan_sama">Kemungkinan Sama</string>
+    <string name="label_ada_kemiripan">Ada Kemiripan</string>
+    <string name="label_tidak_ditemukan">Tidak ditemukan referensi yang cocok</string>
+    <string name="label_diagnosis">DIAGNOSIS OTOMATIS</string>
+    <string name="label_kontributor">Kontributor</string>
+    <string name="db_kosong">Database masih kosong</string>
+    <string name="db_kosong_sub">Rekam HP pertama atau import file .rphp dari komunitas</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Pengaturan</string>
+    <string name="settings_bt_device">Perangkat Bluetooth</string>
+    <string name="settings_bt_desc">Pilih ESP32_PowerMonitor</string>
+    <string name="settings_kalibrasi">Kalibrasi</string>
+    <string name="settings_waveid">WaveID</string>
+    <string name="settings_username">Nama Pengguna</string>
+    <string name="settings_threshold">Ambang Kemiripan (%)</string>
+
+    <!-- Units -->
+    <string name="unit_ampere">A</string>
+    <string name="unit_volt">V</string>
+    <string name="unit_watt">W</string>
+    <string name="unit_mah">mAh</string>
+    <string name="unit_mv">mV</string>
+    <string name="unit_ms">ms</string>
+
+    <!-- Errors -->
+    <string name="error_bt_tidak_tersedia">Bluetooth tidak tersedia</string>
+    <string name="error_bt_tidak_aktif">Aktifkan Bluetooth terlebih dahulu</string>
+    <string name="error_koneksi_gagal">Koneksi gagal. Coba lagi.</string>
+    <string name="error_file_tidak_valid">File tidak valid: checksum gagal</string>
+    <string name="error_import_gagal">Gagal mengimpor file</string>
+</resources>

@@ -1,0 +1,51 @@
+================================================================
+PROMPT P04-PRE — BUAT FILE BARU: bg_nav_active_probe.xml
+R-Phone V3 | Drawable prerequisite untuk ProbeFragment
+================================================================
+
+FASE SCAN:
+1. Buat Git commit dengan pesan "feat: sebelum tambah bg_nav_active_probe"
+2. Scan file referensi untuk pelajari polanya:
+   - app/src/main/res/drawable/bg_nav_active_usb.xml
+   - app/src/main/res/drawable/bg_nav_active_psu.xml
+   - app/src/main/res/drawable/bg_nav_active_waveid.xml
+3. Catat struktur shape (solid + stroke + corners) dari ketiganya
+
+================================================================
+FASE EDIT:
+Buat file BARU:
+  app/src/main/res/drawable/bg_nav_active_probe.xml
+
+Isi file (REPLACE TOTAL — warna Amber #F59E0B, pola sama dengan
+bg_nav_active_usb.xml namun semua warna diganti ke amber):
+
+---
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#1AF59E0B" />
+    <stroke android:width="1dp" android:color="#4DF59E0B" />
+    <corners android:radius="6dp" />
+</shape>
+---
+
+CATATAN WARNA:
+  #1AF59E0B = amber 10% opacity  (fill)
+  #4DF59E0B = amber 30% opacity  (border)
+  Konsisten dengan pola bg_nav_active_usb (#1A00D4FF / #4D00D4FF)
+  dan bg_nav_active_psu (#1A7C3AED / #4D7C3AED)
+
+================================================================
+FASE VERIFIKASI:
+1. Pastikan file ada di direktori drawable
+2. Pastikan struktur XML valid: shape → solid + stroke + corners
+3. Pastikan tidak ada perubahan di file drawable lain
+4. Build → 0 error
+
+================================================================
+FASE BUILD:
+1. Build project → 0 error
+2. Setelah ini langsung lanjutkan ke PROMPT P04
+3. Simpan prompt ini ke file: prompt_P04pre_drawable.txt
+
+================================================================

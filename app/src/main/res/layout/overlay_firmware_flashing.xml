@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    overlay_firmware_flashing.xml
+    Ditampilkan saat proses flash firmware sedang berjalan.
+    Include di activity_main.xml sebagai FrameLayout child.
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/overlayFirmwareFlashing"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="#F0050810"
+    android:visibility="gone"
+    android:padding="32dp">
+
+    <!-- Dots animasi -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="24dp">
+        <View android:id="@+id/fwDot1" android:layout_width="10dp" android:layout_height="10dp"
+            android:background="#F59E0B" android:layout_marginEnd="6dp" android:alpha="0.3" />
+        <View android:id="@+id/fwDot2" android:layout_width="10dp" android:layout_height="10dp"
+            android:background="#F59E0B" android:layout_marginEnd="6dp" android:alpha="0.3" />
+        <View android:id="@+id/fwDot3" android:layout_width="10dp" android:layout_height="10dp"
+            android:background="#F59E0B" android:alpha="0.3" />
+    </LinearLayout>
+
+    <!-- Judul -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="MEMPERBARUI FIRMWARE"
+        android:textColor="#F59E0B"
+        android:textSize="14sp"
+        android:fontFamily="@font/rajdhani_bold"
+        android:letterSpacing="0.15"
+        android:layout_marginBottom="6dp" />
+
+    <!-- Persentase -->
+    <TextView
+        android:id="@+id/tvFwFlashPersen"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="0%"
+        android:textColor="#E2E8F0"
+        android:textSize="36sp"
+        android:fontFamily="@font/jetbrains_mono_bold"
+        android:includeFontPadding="false"
+        android:layout_marginBottom="20dp" />
+
+    <!-- Progress bar amber -->
+    <ProgressBar
+        android:id="@+id/pbFwFlash"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:max="100"
+        android:progress="0"
+        android:progressTint="#F59E0B"
+        android:progressBackgroundTint="#0D1423"
+        android:layout_marginBottom="12dp" />
+
+    <!-- Status teks -->
+    <TextView
+        android:id="@+id/tvFwFlashStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Menginisialisasi..."
+        android:textColor="#64748B"
+        android:textSize="11sp"
+        android:fontFamily="@font/rajdhani_regular"
+        android:layout_marginBottom="20dp" />
+
+    <!-- Warning: jangan cabut OTG -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="⚠ Jangan cabut kabel OTG selama proses berlangsung"
+        android:textColor="#7C3AED"
+        android:textSize="11sp"
+        android:fontFamily="@font/rajdhani_semibold"
+        android:gravity="center"
+        android:background="#0D1423"
+        android:padding="12dp" />
+
+</LinearLayout>

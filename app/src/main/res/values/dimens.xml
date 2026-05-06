@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Layout -->
+    <dimen name="nav_width">52dp</dimen>
+    <dimen name="topbar_height">36dp</dimen>
+    <dimen name="bottom_panel_tab_height">44dp</dimen>
+    <dimen name="bottom_panel_content_height">100dp</dimen>
+    <dimen name="metric_column_width">220dp</dimen>
+
+    <!-- Card -->
+    <dimen name="card_corner_radius">12dp</dimen>
+    <dimen name="card_padding">12dp</dimen>
+    <dimen name="card_elevation">4dp</dimen>
+    <dimen name="card_stroke_width">1dp</dimen>
+
+    <!-- Typography -->
+    <dimen name="text_metric_large">32sp</dimen>
+    <dimen name="text_metric_medium">22sp</dimen>
+    <dimen name="text_metric_small">16sp</dimen>
+    <dimen name="text_label">10sp</dimen>
+    <dimen name="text_header">14sp</dimen>
+    <dimen name="text_body">12sp</dimen>
+    <dimen name="text_badge">10sp</dimen>
+
+    <!-- Spacing -->
+    <dimen name="spacing_xs">4dp</dimen>
+    <dimen name="spacing_sm">8dp</dimen>
+    <dimen name="spacing_md">12dp</dimen>
+    <dimen name="spacing_lg">16dp</dimen>
+    <dimen name="spacing_xl">24dp</dimen>
+
+    <!-- Waveform -->
+    <dimen name="wave_stroke_width">2dp</dimen>
+    <dimen name="wave_glow_radius">12dp</dimen>
+    <dimen name="wave_grid_size">40dp</dimen>
+
+    <!-- Side Nav -->
+    <dimen name="nav_icon_size">22dp</dimen>
+    <dimen name="nav_active_bar_width">3dp</dimen>
+
+    <!-- Mini Waveform (WaveID thumbnail) -->
+    <dimen name="mini_wave_width">80dp</dimen>
+    <dimen name="mini_wave_height">40dp</dimen>
+</resources>

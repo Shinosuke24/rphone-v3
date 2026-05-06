@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:background="@drawable/bg_card"
+    android:layout_marginBottom="4dp"
+    android:clickable="true"
+    android:focusable="true">
+
+    <!-- Border kiri purple -->
+    <View
+        android:layout_width="3dp"
+        android:layout_height="match_parent"
+        android:background="#8B5CF6" />
+
+    <!-- Konten -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:padding="10dp">
+
+        <TextView
+            android:id="@+id/tvItemBrandModel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Brand Model"
+            android:textColor="#F0F4F8"
+            android:textSize="11sp"
+            android:fontFamily="@font/space_grotesk"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvItemKondisi"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Kondisi"
+            android:textColor="#64748B"
+            android:textSize="9sp"
+            android:fontFamily="@font/space_grotesk"
+            android:layout_marginTop="2dp" />
+
+    </LinearLayout>
+
+</LinearLayout>

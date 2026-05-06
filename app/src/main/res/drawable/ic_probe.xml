@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Probe tip (ujung runcing) -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF6B7FA3"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,22 L10,16 L14,16 Z"/>
+    <!-- Probe body -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF6B7FA3"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M10,16 L10,8 L14,8 L14,16"/>
+    <!-- Probe head -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF6B7FA3"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9,8 L15,8 L15,5 L9,5 Z"/>
+    <!-- Probe top pin -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF6B7FA3"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,5 L12,2"/>
+</vector>

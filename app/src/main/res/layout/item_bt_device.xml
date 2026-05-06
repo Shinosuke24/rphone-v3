@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="56dp"
+    android:background="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true">
+
+    <!-- Left accent bar -->
+    <View
+        android:id="@+id/accentBar"
+        android:layout_width="3dp"
+        android:layout_height="0dp"
+        android:background="#00D9FF"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <!-- BT icon container -->
+    <FrameLayout
+        android:id="@+id/iconContainer"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_marginStart="12dp"
+        android:background="#0D00D9FF"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/accentBar">
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_bluetooth"
+            app:tint="#00D9FF"
+            android:alpha="0.9" />
+    </FrameLayout>
+
+    <!-- Device name -->
+    <TextView
+        android:id="@+id/tvDeviceName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="ESP32_PowerMonitor"
+        android:textSize="13sp"
+        android:textColor="#E2E8F0"
+        android:fontFamily="@font/jetbrains_mono_medium"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="8dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/tvDeviceAddress"
+        app:layout_constraintStart_toEndOf="@id/iconContainer"
+        app:layout_constraintEnd_toStartOf="@id/tvDeviceBadge"
+        app:layout_constraintVertical_chainStyle="packed" />
+
+    <!-- MAC address -->
+    <TextView
+        android:id="@+id/tvDeviceAddress"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="00:00:00:00:00:00"
+        android:textSize="10sp"
+        android:textColor="#334155"
+        android:fontFamily="@font/jetbrains_mono_regular"
+        android:letterSpacing="0.05"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="8dp"
+        app:layout_constraintTop_toBottomOf="@id/tvDeviceName"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/iconContainer"
+        app:layout_constraintEnd_toStartOf="@id/tvDeviceBadge" />
+
+    <!-- Badge PAIRED / NEW -->
+    <TextView
+        android:id="@+id/tvDeviceBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="PAIRED"
+        android:textSize="8sp"
+        android:textColor="#00D9FF"
+        android:fontFamily="@font/jetbrains_mono_regular"
+        android:letterSpacing="0.1"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:paddingTop="3dp"
+        android:paddingBottom="3dp"
+        android:layout_marginEnd="12dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Bottom divider -->
+    <View
+        android:layout_width="0dp"
+        android:layout_height="1dp"
+        android:background="#0D00D9FF"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/accentBar"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

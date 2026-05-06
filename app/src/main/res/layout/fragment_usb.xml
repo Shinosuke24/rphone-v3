@@ -1,0 +1,972 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#050810">
+
+    <!-- TOP BAR -->
+    <LinearLayout
+        android:id="@+id/topBarUsb"
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:background="#080C14"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <View
+            android:id="@+id/statusDotUsb"
+            android:layout_width="6dp"
+            android:layout_height="6dp"
+            android:background="@drawable/bg_badge" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="R-PHONE V3"
+            android:textColor="#E2E8F0"
+            android:textSize="12sp"
+            android:fontFamily="@font/rajdhani_bold"
+            android:layout_marginStart="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_nav_active_usb"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="3dp"
+            android:text="USB MODE"
+            android:textColor="#00D4FF"
+            android:textSize="11sp"
+            android:fontFamily="@font/rajdhani_bold" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <Chronometer
+            android:id="@+id/chronometerUsb"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#64748B"
+            android:textSize="10sp"
+            android:fontFamily="@font/jetbrains_mono_regular"
+            android:includeFontPadding="false"
+            android:layout_marginEnd="10dp" />
+    </LinearLayout>
+
+    <View
+        android:id="@+id/topBarDivider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#0D1423"
+        app:layout_constraintTop_toBottomOf="@id/topBarUsb" />
+
+    <!-- ALERT BANNER -->
+    <TextView
+        android:id="@+id/alertBannerUsb"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:padding="4dp"
+        android:textColor="#FFFFFF"
+        android:textSize="10sp"
+        android:fontFamily="@font/rajdhani_bold"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/topBarDivider" />
+
+    <!-- CONTAINER UTAMA -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:orientation="horizontal"
+        app:layout_constraintTop_toBottomOf="@id/alertBannerUsb"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <!-- KOLOM KIRI (weight 0.38) -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.38"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <!-- ═══════════════════════════════════════════════════
+                 NORMAL MODE: Grid cards 3 baris (wrap_content)
+                 Disembunyikan saat focus mode aktif
+                 ═══════════════════════════════════════════════════ -->
+            <LinearLayout
+                android:id="@+id/containerCardsUsb"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <!-- Baris 1: ARUS + TEGANGAN -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="3dp"
+                        android:background="@drawable/bg_metric_card"
+                        android:padding="12dp"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="ARUS"
+                            android:textColor="#64748B"
+                            android:textSize="11sp"
+                            android:textAllCaps="true"
+                            android:letterSpacing="0.12"
+                            android:fontFamily="@font/rajdhani_semibold" />
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="bottom">
+                            <TextView
+                                android:id="@+id/tvArusUsb"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0.000"
+                                android:textColor="#00D4FF"
+                                android:textSize="28sp"
+                                android:fontFamily="@font/jetbrains_mono_bold"
+                                android:includeFontPadding="false" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="A"
+                                android:textColor="#64748B"
+                                android:textSize="13sp"
+                                android:layout_marginStart="3dp"
+                                android:fontFamily="@font/rajdhani_regular" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="3dp"
+                        android:background="@drawable/bg_metric_card"
+                        android:padding="12dp"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="TEGANGAN"
+                            android:textColor="#64748B"
+                            android:textSize="11sp"
+                            android:textAllCaps="true"
+                            android:letterSpacing="0.12"
+                            android:fontFamily="@font/rajdhani_semibold" />
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="bottom">
+                            <TextView
+                                android:id="@+id/tvTeganganUsb"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0.00"
+                                android:textColor="#E2E8F0"
+                                android:textSize="28sp"
+                                android:fontFamily="@font/jetbrains_mono_bold"
+                                android:includeFontPadding="false" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="V"
+                                android:textColor="#64748B"
+                                android:textSize="13sp"
+                                android:layout_marginStart="3dp"
+                                android:fontFamily="@font/rajdhani_regular" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Baris 2: DAYA + KAPASITAS -->
+                <LinearLayout
+                    android:id="@+id/rowDayaKapasitas"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="3dp"
+                        android:background="@drawable/bg_metric_card"
+                        android:padding="12dp"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="DAYA"
+                            android:textColor="#64748B"
+                            android:textSize="11sp"
+                            android:textAllCaps="true"
+                            android:letterSpacing="0.12"
+                            android:fontFamily="@font/rajdhani_semibold" />
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="bottom">
+                            <TextView
+                                android:id="@+id/tvDayaUsb"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0.00"
+                                android:textColor="#00D4FF"
+                                android:textSize="28sp"
+                                android:fontFamily="@font/jetbrains_mono_bold"
+                                android:includeFontPadding="false" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="W"
+                                android:textColor="#64748B"
+                                android:textSize="13sp"
+                                android:layout_marginStart="3dp"
+                                android:fontFamily="@font/rajdhani_regular" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="3dp"
+                        android:background="@drawable/bg_metric_card"
+                        android:padding="12dp"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="KAPASITAS"
+                            android:textColor="#64748B"
+                            android:textSize="11sp"
+                            android:textAllCaps="true"
+                            android:letterSpacing="0.12"
+                            android:fontFamily="@font/rajdhani_semibold" />
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="bottom">
+                            <TextView
+                                android:id="@+id/tvKapasitasUsb"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="--"
+                                android:textColor="#64748B"
+                                android:textSize="28sp"
+                                android:fontFamily="@font/jetbrains_mono_bold"
+                                android:includeFontPadding="false" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="mAh"
+                                android:textColor="#64748B"
+                                android:textSize="13sp"
+                                android:layout_marginStart="3dp"
+                                android:fontFamily="@font/rajdhani_regular" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Baris 3: DP+ / DM- -->
+                <LinearLayout
+                    android:id="@+id/rowDpDm"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="3dp"
+                        android:background="@drawable/bg_metric_card"
+                        android:padding="12dp"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="D+"
+                            android:textColor="#64748B"
+                            android:textSize="11sp"
+                            android:textAllCaps="true"
+                            android:letterSpacing="0.12"
+                            android:fontFamily="@font/rajdhani_semibold" />
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="bottom">
+                            <TextView
+                                android:id="@+id/tvDp"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0.00"
+                                android:textColor="#00D4FF"
+                                android:textSize="22sp"
+                                android:fontFamily="@font/jetbrains_mono_bold"
+                                android:includeFontPadding="false" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="V"
+                                android:textColor="#64748B"
+                                android:textSize="11sp"
+                                android:layout_marginStart="3dp"
+                                android:fontFamily="@font/rajdhani_regular" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="3dp"
+                        android:background="@drawable/bg_metric_card"
+                        android:padding="12dp"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="D-"
+                            android:textColor="#64748B"
+                            android:textSize="11sp"
+                            android:textAllCaps="true"
+                            android:letterSpacing="0.12"
+                            android:fontFamily="@font/rajdhani_semibold" />
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="bottom">
+                            <TextView
+                                android:id="@+id/tvDm"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0.00"
+                                android:textColor="#00D4FF"
+                                android:textSize="22sp"
+                                android:fontFamily="@font/jetbrains_mono_bold"
+                                android:includeFontPadding="false" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="V"
+                                android:textColor="#64748B"
+                                android:textSize="11sp"
+                                android:layout_marginStart="3dp"
+                                android:fontFamily="@font/rajdhani_regular" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+            </LinearLayout>
+            <!-- END containerCardsUsb (normal mode) -->
+
+            <!-- ═══════════════════════════════════════════════════
+                 FOCUS MODE: 2 card vertikal besar A & V
+                 Ditampilkan saat focus mode aktif (default GONE)
+                 ═══════════════════════════════════════════════════ -->
+            <LinearLayout
+                android:id="@+id/containerFocusUsb"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- Card Atas: ARUS (A) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:layout_marginBottom="4dp"
+                    android:background="@drawable/bg_metric_card"
+                    android:padding="10dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="A"
+                        android:textColor="#64748B"
+                        android:textSize="16sp"
+                        android:fontFamily="@font/rajdhani_semibold" />
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tvArusFocus"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:text="0.000"
+                        android:textColor="#00D4FF"
+                        android:gravity="center"
+                        android:fontFamily="@font/technology"
+                        android:includeFontPadding="false"
+                        app:autoSizeTextType="uniform"
+                        app:autoSizeMinTextSize="24sp"
+                        app:autoSizeMaxTextSize="120sp"
+                        app:autoSizeStepGranularity="2sp" />
+                </LinearLayout>
+
+                <!-- Card Bawah: TEGANGAN (V) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/bg_metric_card"
+                    android:padding="10dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="V"
+                        android:textColor="#64748B"
+                        android:textSize="16sp"
+                        android:fontFamily="@font/rajdhani_semibold" />
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tvTeganganFocus"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:text="0.00"
+                        android:textColor="#E2E8F0"
+                        android:gravity="center"
+                        android:fontFamily="@font/technology"
+                        android:includeFontPadding="false"
+                        app:autoSizeTextType="uniform"
+                        app:autoSizeMinTextSize="24sp"
+                        app:autoSizeMaxTextSize="120sp"
+                        app:autoSizeStepGranularity="2sp" />
+                </LinearLayout>
+
+            </LinearLayout>
+            <!-- END containerFocusUsb (focus mode) -->
+
+            <!-- DOT INDICATOR (halaman 1 = normal, halaman 2 = focus) -->
+            <LinearLayout
+                android:id="@+id/dotIndicatorUsb"
+                android:layout_width="match_parent"
+                android:layout_height="12dp"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="2dp">
+
+                <View
+                    android:id="@+id/dotNormalUsb"
+                    android:layout_width="6dp"
+                    android:layout_height="6dp"
+                    android:background="@drawable/bg_badge"
+                    android:alpha="1.0"
+                    android:layout_marginHorizontal="3dp" />
+
+                <View
+                    android:id="@+id/dotFocusUsb"
+                    android:layout_width="6dp"
+                    android:layout_height="6dp"
+                    android:background="@drawable/bg_badge"
+                    android:alpha="0.3"
+                    android:layout_marginHorizontal="3dp" />
+
+            </LinearLayout>
+
+            <!-- Spacer fleksibel (hanya muncul di normal mode) -->
+            <View
+                android:id="@+id/spacerUsb"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <!-- MULAI ANALISA -->
+            <TextView
+                android:id="@+id/btnMulaiAnalisa"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_action_psu"
+                android:gravity="center"
+                android:text="MULAI ANALISA"
+                android:textColor="#00D4FF"
+                android:textSize="15sp"
+                android:textAllCaps="true"
+                android:letterSpacing="0.12"
+                android:fontFamily="@font/rajdhani_bold" />
+
+            <!-- STOP ANALISA -->
+            <TextView
+                android:id="@+id/btnStopAnalisa"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_chip_peak"
+                android:gravity="center"
+                android:text="STOP ANALISA"
+                android:textColor="#EF4444"
+                android:textSize="15sp"
+                android:textAllCaps="true"
+                android:letterSpacing="0.12"
+                android:fontFamily="@font/rajdhani_bold"
+                android:visibility="gone" />
+
+            <!-- LIHAT DETAIL -->
+            <TextView
+                android:id="@+id/btnLihatDetail"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_action_psu"
+                android:gravity="center"
+                android:text="LIHAT DETAIL ↗"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textAllCaps="true"
+                android:letterSpacing="0.12"
+                android:fontFamily="@font/rajdhani_bold"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
+        <!-- KOLOM KANAN (weight 0.62) -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.62"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <!-- CHART CONTAINER -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_metric_card"
+                android:padding="10dp"
+                android:orientation="vertical">
+
+                <!-- Tabs Bar -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="#080C14"
+                    android:padding="4dp"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:id="@+id/tabArusUsb"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="ARUS"
+                        android:textColor="#00D4FF"
+                        android:textSize="10sp"
+                        android:fontFamily="@font/rajdhani_bold"
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="6dp"
+                        android:background="@drawable/bg_nav_active_usb" />
+
+                    <TextView
+                        android:id="@+id/tabTeganganUsb"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="VOLT"
+                        android:textColor="#334155"
+                        android:textSize="10sp"
+                        android:fontFamily="@font/rajdhani_bold"
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="6dp"
+                        android:layout_marginStart="4dp" />
+
+                    <TextView
+                        android:id="@+id/tabDayaUsb"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="DAYA"
+                        android:textColor="#334155"
+                        android:textSize="10sp"
+                        android:fontFamily="@font/rajdhani_bold"
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="6dp"
+                        android:layout_marginStart="4dp" />
+
+                    <TextView
+                        android:id="@+id/tabAllUsb"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="ALL"
+                        android:textColor="#334155"
+                        android:textSize="10sp"
+                        android:fontFamily="@font/rajdhani_bold"
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="6dp"
+                        android:layout_marginStart="4dp" />
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+
+                    <TextView
+                        android:id="@+id/tvCharge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="SDP"
+                        android:textColor="#00D4FF"
+                        android:textSize="10sp"
+                        android:fontFamily="@font/rajdhani_bold"
+                        android:background="@drawable/bg_nav_active_usb"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="3dp"
+                        android:layout_marginStart="4dp" />
+
+                </LinearLayout>
+
+                <!-- Chart Area -->
+                <com.rphone.v3.view.WaveformView
+                    android:id="@+id/waveformUsb"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:layout_marginTop="4dp"
+                    android:background="#080C14"
+                    android:layerType="software" />
+
+                <!-- Stats Chips row -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="6dp">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_chip_peak"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="8dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="PEAK"
+                            android:textColor="#EF4444"
+                            android:textSize="10sp"
+                            android:fontFamily="@font/rajdhani_bold" />
+                        <TextView
+                            android:id="@+id/tvPeakUsb"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0.000"
+                            android:textColor="#E2E8F0"
+                            android:textSize="13sp"
+                            android:layout_marginStart="6dp"
+                            android:fontFamily="@font/jetbrains_mono_bold"
+                            android:includeFontPadding="false" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:background="@drawable/bg_chip_avg"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="8dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="AVG"
+                            android:textColor="#A78BFA"
+                            android:textSize="10sp"
+                            android:fontFamily="@font/rajdhani_bold" />
+                        <TextView
+                            android:id="@+id/tvAvgUsb"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0.000"
+                            android:textColor="#E2E8F0"
+                            android:textSize="13sp"
+                            android:layout_marginStart="6dp"
+                            android:fontFamily="@font/jetbrains_mono_bold"
+                            android:includeFontPadding="false" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:background="@drawable/bg_chip_min_usb"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="8dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="MIN"
+                            android:textColor="#00D4FF"
+                            android:textSize="10sp"
+                            android:fontFamily="@font/rajdhani_bold" />
+                        <TextView
+                            android:id="@+id/tvMinUsb"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0.000"
+                            android:textColor="#E2E8F0"
+                            android:textSize="13sp"
+                            android:layout_marginStart="6dp"
+                            android:fontFamily="@font/jetbrains_mono_bold"
+                            android:includeFontPadding="false" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+
+                    <TextView
+                        android:id="@+id/btnPauseUsb"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="⏸"
+                        android:textColor="#64748B"
+                        android:textSize="12sp"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="6dp"
+                        android:background="@drawable/bg_ocp_off" />
+
+                    <TextView
+                        android:id="@+id/btnResetUsb"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="↺"
+                        android:textColor="#EF4444"
+                        android:textSize="12sp"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="6dp"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_chip_peak" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- PANEL LIVE ANALISA USB -->
+            <LinearLayout
+                android:id="@+id/panelLiveAnalisa"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_metric_card"
+                android:padding="8dp"
+                android:layout_marginTop="6dp"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="4dp">
+
+                    <ProgressBar
+                        android:id="@+id/spinnerAnalisa"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/tvLabelAnalisa"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="MENUNGGU..."
+                        android:textColor="#00D4FF"
+                        android:textSize="12sp"
+                        android:fontFamily="@font/rajdhani_bold"
+                        android:layout_marginStart="8dp" />
+
+                    <Chronometer
+                        android:id="@+id/chronometerAnalisa"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#E2E8F0"
+                        android:textSize="12sp"
+                        android:fontFamily="@font/jetbrains_mono_regular"
+                        android:visibility="gone" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvStatusAnalisa"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:visibility="gone" />
+
+                <ProgressBar
+                    android:id="@+id/progressSampel"
+                    style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="3dp"
+                    android:max="150"
+                    android:progress="0"
+                    android:progressTint="#00D4FF"
+                    android:layout_marginBottom="2dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="4dp">
+
+                    <TextView
+                        android:id="@+id/tvSampelAnalisa"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="0 sampel"
+                        android:textColor="#64748B"
+                        android:textSize="18sp"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/tvMengumpulkan"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Mengumpulkan data... (0/75)"
+                        android:textColor="#64748B"
+                        android:textSize="9sp"
+                        android:fontFamily="@font/rajdhani_regular" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/layoutKontenSkor"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:paddingEnd="9dp">
+
+                        <TextView
+                            android:id="@+id/tvRefLabel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="REF: —"
+                            android:textColor="#8B5CF6"
+                            android:textSize="15sp"
+                            android:fontFamily="@font/rajdhani_bold" />
+
+                        <TextView
+                            android:id="@+id/tvSelisihPeak"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Δ peak: —"
+                            android:textColor="#64748B"
+                            android:textSize="10sp"
+                            android:fontFamily="@font/rajdhani_regular"
+                            android:layout_marginTop="4dp" />
+
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:gravity="end">
+
+                        <TextView
+                            android:id="@+id/tvSkorLive"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0%"
+                            android:textColor="#F0F4F8"
+                            android:textSize="32sp"
+                            android:fontFamily="@font/jetbrains_mono_regular"
+                            android:includeFontPadding="false" />
+
+                        <TextView
+                            android:id="@+id/tvLabelLive"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="—"
+                            android:textColor="#64748B"
+                            android:textSize="11sp"
+                            android:fontFamily="@font/rajdhani_regular"
+                            android:layout_marginTop="2dp" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- PANEL HISTORY -->
+            <LinearLayout
+                android:id="@+id/panelHistory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_metric_card"
+                android:padding="8dp"
+                android:layout_marginTop="6dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="HISTORY ANALISA"
+                    android:textColor="#64748B"
+                    android:textSize="9sp"
+                    android:fontFamily="@font/rajdhani_bold"
+                    android:letterSpacing="0.10"
+                    android:layout_marginBottom="4dp" />
+
+                <LinearLayout
+                    android:id="@+id/listHistory"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

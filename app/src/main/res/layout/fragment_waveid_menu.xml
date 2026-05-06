@@ -1,0 +1,311 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#050810">
+
+    <!-- TOP BAR (36dp) -->
+    <LinearLayout
+        android:id="@+id/topBarWaveId"
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:background="#080C14"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <View
+            android:layout_width="6dp"
+            android:layout_height="6dp"
+            android:background="@drawable/bg_badge"
+            app:tint="#10B981" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="R-PHONE V3"
+            android:textColor="#E2E8F0"
+            android:textSize="12sp"
+            android:fontFamily="@font/rajdhani_bold"
+            android:layout_marginStart="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_nav_active_waveid"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="3dp"
+            android:text="WAVE ID"
+            android:textColor="#10B981"
+            android:textSize="11sp"
+            android:fontFamily="@font/rajdhani_bold" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <View
+        android:id="@+id/topBarDividerWave"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#0D1423"
+        app:layout_constraintTop_toBottomOf="@id/topBarWaveId" />
+
+    <!-- CONTAINER (2 kolom) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:orientation="horizontal"
+        app:layout_constraintTop_toBottomOf="@id/topBarDividerWave"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <!-- KOLOM KIRI (weight 0.38) -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.38"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="〰  WAVEID"
+                android:textColor="#10B981"
+                android:textSize="22sp"
+                android:fontFamily="@font/rajdhani_bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Analisa &amp; identifikasi\narus boot smartphone"
+                android:textColor="#64748B"
+                android:textSize="12sp"
+                android:fontFamily="@font/rajdhani_regular"
+                android:layout_marginTop="6dp"
+                android:lineSpacingMultiplier="1.4" />
+
+            <!-- Metric Card jumlah profil -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_metric_card"
+                android:padding="12dp"
+                android:orientation="vertical"
+                android:layout_marginTop="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="DATABASE"
+                    android:textColor="#64748B"
+                    android:textSize="11sp"
+                    android:textAllCaps="true"
+                    android:fontFamily="@font/rajdhani_semibold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="bottom">
+                    <TextView
+                        android:id="@+id/tvJumlahProfilMenu"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textColor="#10B981"
+                        android:textSize="28sp"
+                        android:fontFamily="@font/jetbrains_mono_bold"
+                        android:includeFontPadding="false" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="profil"
+                        android:textColor="#64748B"
+                        android:textSize="13sp"
+                        android:layout_marginStart="3dp"
+                        android:fontFamily="@font/rajdhani_regular" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- KOLOM KANAN (weight 0.62) -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.62"
+            android:orientation="vertical"
+            android:padding="10dp"
+            android:gravity="center">
+
+            <!-- Grid 2x2 Submenu -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="6dp">
+
+                <!-- menuRekam -->
+                <LinearLayout
+                    android:id="@+id/menuRekam"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:background="@drawable/bg_metric_card"
+                    android:padding="14dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginEnd="6dp"
+                    android:foreground="?attr/selectableItemBackground">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📹"
+                        android:textSize="22sp" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Rekam Baru"
+                        android:textColor="#E2E8F0"
+                        android:textSize="13sp"
+                        android:fontFamily="@font/rajdhani_bold"
+                        android:layout_marginTop="6dp" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Rekam arus boot HP"
+                        android:textColor="#64748B"
+                        android:textSize="10sp"
+                        android:fontFamily="@font/rajdhani_regular"
+                        android:layout_marginTop="2dp" />
+                </LinearLayout>
+
+                <!-- menuDatabase -->
+                <LinearLayout
+                    android:id="@+id/menuDatabase"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:background="@drawable/bg_metric_card"
+                    android:padding="14dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📂"
+                        android:textSize="22sp" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Database"
+                        android:textColor="#E2E8F0"
+                        android:textSize="13sp"
+                        android:fontFamily="@font/rajdhani_bold"
+                        android:layout_marginTop="6dp" />
+                    <TextView
+                        android:id="@+id/tvJumlahProfilCard"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0 profil"
+                        android:textColor="#64748B"
+                        android:textSize="10sp"
+                        android:fontFamily="@font/rajdhani_regular"
+                        android:layout_marginTop="2dp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <!-- menuBandingkan -->
+                <LinearLayout
+                    android:id="@+id/menuBandingkan"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:background="@drawable/bg_metric_card"
+                    android:padding="14dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginEnd="6dp"
+                    android:foreground="?attr/selectableItemBackground">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📊"
+                        android:textSize="22sp" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Bandingkan"
+                        android:textColor="#E2E8F0"
+                        android:textSize="13sp"
+                        android:fontFamily="@font/rajdhani_bold"
+                        android:layout_marginTop="6dp" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Overlay 2 waveform"
+                        android:textColor="#64748B"
+                        android:textSize="10sp"
+                        android:fontFamily="@font/rajdhani_regular"
+                        android:layout_marginTop="2dp" />
+                </LinearLayout>
+
+                <!-- menuImport -->
+                <LinearLayout
+                    android:id="@+id/menuImport"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:background="@drawable/bg_metric_card"
+                    android:padding="14dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📥"
+                        android:textSize="22sp" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Import .rphp"
+                        android:textColor="#E2E8F0"
+                        android:textSize="13sp"
+                        android:fontFamily="@font/rajdhani_bold"
+                        android:layout_marginTop="6dp" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Tambah dari komunitas"
+                        android:textColor="#64748B"
+                        android:textSize="10sp"
+                        android:fontFamily="@font/rajdhani_regular"
+                        android:layout_marginTop="2dp" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

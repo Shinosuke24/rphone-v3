@@ -1,0 +1,298 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#050810">
+
+    <!-- TOP BAR -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:background="#080C14"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp">
+
+        <TextView
+            android:id="@+id/btnBack"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="← BACK"
+            android:textColor="#64748B"
+            android:textSize="11sp"
+            android:fontFamily="@font/rajdhani_bold"
+            android:paddingEnd="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground" />
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="20dp"
+            android:background="#1E293B"
+            android:layout_marginEnd="12dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="COMPARE"
+            android:textColor="#E2E8F0"
+            android:textSize="12sp"
+            android:fontFamily="@font/rajdhani_bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_nav_active_probe"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="3dp"
+            android:text="REF vs LIVE"
+            android:textColor="#00B4D8"
+            android:textSize="10sp"
+            android:fontFamily="@font/rajdhani_bold" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+    </LinearLayout>
+
+    <!-- DIVIDER -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#0D1423" />
+
+    <!-- CONTROL BAR -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#080C14"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="REFERENSI"
+                android:textColor="#475569"
+                android:textSize="9sp"
+                android:fontFamily="@font/rajdhani_bold"
+                android:letterSpacing="0.1" />
+
+            <TextView
+                android:id="@+id/tvRefFile"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="— belum dipilih —"
+                android:textColor="#334155"
+                android:textSize="11sp"
+                android:fontFamily="@font/jetbrains_mono_regular"
+                android:ellipsize="end"
+                android:maxLines="1" />
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/btnLoadRef"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:gravity="center"
+            android:text="LOAD"
+            android:textColor="#00B4D8"
+            android:textSize="11sp"
+            android:fontFamily="@font/rajdhani_bold"
+            android:background="@drawable/bg_metric_card"
+            android:paddingHorizontal="12dp"
+            android:layout_marginStart="8dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground" />
+
+        <TextView
+            android:id="@+id/btnMulaiUkur"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:gravity="center"
+            android:text="CAPTURE"
+            android:textColor="#22C55E"
+            android:textSize="11sp"
+            android:fontFamily="@font/rajdhani_bold"
+            android:background="@drawable/bg_metric_card"
+            android:paddingHorizontal="12dp"
+            android:layout_marginStart="6dp"
+            android:enabled="false"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground" />
+
+        <TextView
+            android:id="@+id/btnResetLive"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:gravity="center"
+            android:text="RESET"
+            android:textColor="#EF4444"
+            android:textSize="11sp"
+            android:fontFamily="@font/rajdhani_bold"
+            android:background="@drawable/bg_metric_card"
+            android:paddingHorizontal="10dp"
+            android:layout_marginStart="6dp"
+            android:enabled="false"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground" />
+
+    </LinearLayout>
+
+    <!-- LIVE VALUE BAR -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#0A0F1C"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="LIVE: "
+            android:textColor="#475569"
+            android:textSize="11sp"
+            android:fontFamily="@font/rajdhani_bold" />
+
+        <TextView
+            android:id="@+id/tvLiveValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="—"
+            android:textColor="#334155"
+            android:textSize="13sp"
+            android:fontFamily="@font/jetbrains_mono_bold" />
+
+        <TextView
+            android:id="@+id/tvStatusInfo"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Load referensi untuk mulai compare"
+            android:textColor="#64748B"
+            android:textSize="10sp"
+            android:fontFamily="@font/rajdhani_medium"
+            android:gravity="end" />
+
+        <TextView
+            android:id="@+id/tvSummary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#22C55E"
+            android:textSize="10sp"
+            android:fontFamily="@font/rajdhani_semibold"
+            android:layout_marginStart="8dp"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
+    <!-- DIVIDER -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#0D1423" />
+
+    <!-- HEADER TABEL -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="28dp"
+        android:background="#080C14"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="6dp">
+
+        <TextView
+            android:layout_width="28dp"
+            android:layout_height="wrap_content"
+            android:text="No"
+            android:textColor="#475569"
+            android:textSize="9sp"
+            android:fontFamily="@font/rajdhani_semibold"
+            android:gravity="center" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.5"
+            android:text="Kaki"
+            android:textColor="#475569"
+            android:textSize="9sp"
+            android:fontFamily="@font/rajdhani_semibold" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.2"
+            android:text="REFERENSI"
+            android:textColor="#475569"
+            android:textSize="9sp"
+            android:fontFamily="@font/rajdhani_semibold"
+            android:gravity="center" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.2"
+            android:text="LIVE"
+            android:textColor="#475569"
+            android:textSize="9sp"
+            android:fontFamily="@font/rajdhani_semibold"
+            android:gravity="center" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="STATUS"
+            android:textColor="#475569"
+            android:textSize="9sp"
+            android:fontFamily="@font/rajdhani_semibold"
+            android:gravity="end"
+            android:paddingEnd="4dp" />
+
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#0D1423" />
+
+    <!-- TABEL COMPARE -->
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvCompare"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:nestedScrollingEnabled="false" />
+
+    </androidx.core.widget.NestedScrollView>
+
+</LinearLayout>

@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/usbFragment">
+
+    <fragment
+        android:id="@+id/usbFragment"
+        android:name="com.rphone.v3.ui.usb.UsbFragment"
+        android:label="USB Mode">
+        <action
+            android:id="@+id/action_usb_to_hasil_analisa"
+            app:destination="@id/hasilAnalisaFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/psuFragment"
+        android:name="com.rphone.v3.ui.psu.PsuFragment"
+        android:label="PSU Mode">
+        <action
+            android:id="@+id/action_psu_to_hasil"
+            app:destination="@id/hasilAnalisaFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/probeFragment"
+        android:name="com.rphone.v3.ui.probe.ProbeFragment"
+        android:label="Probe">
+        <action
+            android:id="@+id/action_probe_to_compare"
+            app:destination="@+id/probeCompareFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/probeCompareFragment"
+        android:name="com.rphone.v3.ui.probe.ProbeCompareFragment"
+        android:label="Probe Compare" />
+
+    <fragment
+        android:id="@+id/waveidMenuFragment"
+        android:name="com.rphone.v3.ui.waveid.WaveIDMenuFragment"
+        android:label="WaveID">
+        <action
+            android:id="@+id/action_menu_to_rekam"
+            app:destination="@id/rekamFragment" />
+        <action
+            android:id="@+id/action_menu_to_database"
+            app:destination="@id/databaseFragment" />
+        <action
+            android:id="@+id/action_menu_to_bandingkan"
+            app:destination="@id/bandingkanFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/rekamFragment"
+        android:name="com.rphone.v3.ui.waveid.RekamFragment"
+        android:label="Rekam Arus Boot">
+        <action
+            android:id="@+id/action_rekam_to_hasil"
+            app:destination="@id/hasilAnalisaFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/hasilAnalisaFragment"
+        android:name="com.rphone.v3.ui.waveid.HasilAnalisaFragment"
+        android:label="Hasil Analisa" />
+
+    <fragment
+        android:id="@+id/databaseFragment"
+        android:name="com.rphone.v3.ui.waveid.DatabaseFragment"
+        android:label="Database" />
+
+    <fragment
+        android:id="@+id/bandingkanFragment"
+        android:name="com.rphone.v3.ui.waveid.BandingkanFragment"
+        android:label="Bandingkan" />
+
+    <fragment
+        android:id="@+id/settingsFragment"
+        android:name="com.rphone.v3.ui.settings.SettingsFragment"
+        android:label="Pengaturan" />
+
+    <fragment
+        android:id="@+id/uartFragment"
+        android:name="com.rphone.v3.ui.uart.UartFragment"
+        android:label="UART Reader">
+        <action
+            android:id="@+id/action_uart_to_custom_rules"
+            app:destination="@+id/customRuleEditorFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/customRuleEditorFragment"
+        android:name="com.rphone.v3.ui.uart.CustomRuleEditorFragment"
+        android:label="Custom Rules" />
+
+</navigation>

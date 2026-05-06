@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:layout_marginBottom="10dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/tvCalLabel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Label"
+            android:textColor="@color/text_secondary"
+            android:textSize="9sp"
+            android:fontFamily="@font/rajdhani_semibold"
+            android:textStyle="bold"
+            android:letterSpacing="0.08"
+            android:includeFontPadding="false" />
+
+        <TextView
+            android:id="@+id/tvCalSensor"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="-.---"
+            android:textColor="@color/usb_primary"
+            android:textSize="11sp"
+            android:fontFamily="@font/jetbrains_mono_regular"
+            android:includeFontPadding="false"
+            android:layout_marginEnd="8dp" />
+
+        <TextView
+            android:id="@+id/tvCalValue"
+            android:layout_width="52dp"
+            android:layout_height="wrap_content"
+            android:text="1.00x"
+            android:textColor="@color/usb_primary"
+            android:textSize="11sp"
+            android:fontFamily="@font/jetbrains_mono_regular"
+            android:includeFontPadding="false"
+            android:textAlignment="textEnd" />
+
+    </LinearLayout>
+
+    <SeekBar
+        android:id="@+id/seekCalValue"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="100"
+        android:progress="50"
+        android:progressTint="@color/usb_primary"
+        android:thumbTint="@color/usb_primary"
+        android:layout_marginTop="2dp" />
+
+</LinearLayout>

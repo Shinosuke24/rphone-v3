@@ -1,0 +1,30 @@
+# Build files
+build/
+.gradle/
+*.apk
+*.jar
+*.exe
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# System
+.DS_Store
+*.swp
+*.swo
+
+# Environment
+local.properties
+gradle.properties
+
+# Dependencies
+.m2/
+node_modules/
+
+# Temp
+tmp/
+temp/
+*.log
+app/src/main/assets/service_account.json

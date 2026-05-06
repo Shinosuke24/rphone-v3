@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Banner in-app notifikasi sync Supabase
+    Taruh di: res/layout/banner_sync_notif.xml
+-->
+<androidx.cardview.widget.CardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/bannerSyncNotif"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_gravity="center_horizontal|top"
+    android:layout_marginTop="12dp"
+    android:layout_marginStart="16dp"
+    android:layout_marginEnd="16dp"
+    android:visibility="gone"
+    app:cardBackgroundColor="@color/surface"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="8dp"
+    app:cardMaxElevation="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="14dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp">
+
+        <!-- Accent bar kiri -->
+        <View
+            android:layout_width="3dp"
+            android:layout_height="36dp"
+            android:background="#10B981"
+            android:layout_marginEnd="10dp" />
+
+        <!-- Bell icon -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🔔"
+            android:textSize="14sp"
+            android:layout_marginEnd="8dp" />
+
+        <!-- Teks: dibatasi maxWidth supaya tidak mendorong tombol ✕ -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_marginEnd="8dp">
+
+            <TextView
+                android:id="@+id/tvBannerTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="USER upload data baru"
+                android:textColor="@color/text_primary"
+                android:textSize="11sp"
+                android:fontFamily="@font/rajdhani_semibold"
+                android:textAllCaps="false"
+                android:letterSpacing="0.03"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/tvBannerSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="BRAND MODEL — KONDISI"
+                android:textColor="@color/text_secondary"
+                android:textSize="10sp"
+                android:fontFamily="@font/space_grotesk_regular"
+                android:layout_marginTop="1dp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+        </LinearLayout>
+
+        <!-- Tombol close: lebar tetap, tidak ikut terdorong -->
+        <TextView
+            android:id="@+id/btnBannerClose"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:text="✕"
+            android:textSize="12sp"
+            android:textColor="@color/text_tertiary"
+            android:gravity="center"
+            android:background="@drawable/bg_card"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground" />
+
+    </LinearLayout>
+
+</androidx.cardview.widget.CardView>

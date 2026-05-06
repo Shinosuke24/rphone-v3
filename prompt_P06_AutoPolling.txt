@@ -1,0 +1,429 @@
+================================================================
+PROMPT P06 — UPDATE 2 FILE: ProbeViewModel.kt + ProbeFragment.kt
+Auto polling 500ms — ganti model tap-to-measure
+R-Phone V3 | Probe Meter Android
+================================================================
+
+FASE SCAN:
+1. Buat Git commit dengan pesan "feat: sebelum update probe auto polling"
+2. Scan kedua file yang akan diubah:
+   - app/src/main/java/com/rphone/v3/ui/probe/ProbeViewModel.kt
+   - app/src/main/java/com/rphone/v3/ui/probe/ProbeFragment.kt
+   - app/src/main/res/layout/fragment_probe.xml
+     (catat id btnUkur — akan diganti fungsinya jadi START/STOP)
+
+================================================================
+FASE EDIT — FILE 1:
+REPLACE TOTAL file:
+  app/src/main/java/com/rphone/v3/ui/probe/ProbeViewModel.kt
+
+---
+package com.rphone.v3.ui.probe
+
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.rphone.v3.bluetooth.BluetoothManager
+import com.rphone.v3.model.BtStatus
+import com.rphone.v3.model.ProbeData
+import com.rphone.v3.util.JsonParser
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+
+class ProbeViewModel : ViewModel() {
+
+    private val _activeMode = MutableLiveData("VOLT")
+    val activeMode: LiveData<String> = _activeMode
+
+    private val _probeData = MutableLiveData<ProbeData?>(null)
+    val probeData: LiveData<ProbeData?> = _probeData
+
+    private val _btStatus = MutableLiveData(BtStatus.DISCONNECTED)
+    val btStatus: LiveData<BtStatus> = _btStatus
+
+    private val _history = MutableLiveData<List<ProbeData>>(emptyList())
+    val history: LiveData<List<ProbeData>> = _history
+
+    // true = polling sedang berjalan
+    private val _isPolling = MutableLiveData(false)
+    val isPolling: LiveData<Boolean> = _isPolling
+
+    private var observingStarted = false
+    private var pollingJob: Job? = null
+    private var btManagerRef: BluetoothManager? = null
+
+    companion object {
+        private const val HISTORY_MAX    = 5
+        private const val POLL_INTERVAL  = 500L  // ms
+    }
+
+    fun startObserving(btManager: BluetoothManager) {
+        if (observingStarted) return
+        observingStarted = true
+        btManagerRef = btManager
+
+        viewModelScope.launch {
+            btManager.status.collectLatest { status ->
+                _btStatus.postValue(status)
+                // Auto stop polling jika BT putus
+                if (status != BtStatus.CONNECTED) {
+                    stopPolling()
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            btManager.dataFlow.collect { json ->
+                val data = JsonParser.parseProbeData(json) ?: return@collect
+                _probeData.postValue(data)
+                addToHistory(data)
+            }
+        }
+    }
+
+    fun setActiveMode(mode: String) {
+        _activeMode.value = mode
+        // Restart polling dengan command baru jika sedang aktif
+        if (_isPolling.value == true) {
+            stopPolling()
+            startPolling()
+        }
+    }
+
+    fun startPolling() {
+        if (_isPolling.value == true) return
+        val btManager = btManagerRef ?: return
+        if (btManager.status.value != BtStatus.CONNECTED) return
+
+        _isPolling.value = true
+        pollingJob = viewModelScope.launch {
+            while (true) {
+                val cmd = when (_activeMode.value) {
+                    "VOLT"  -> "GET_VOLT"
+                    "DIODE" -> "GET_DIODE"
+                    "OHM"   -> "GET_OHM"
+                    else    -> "GET_VOLT"
+                }
+                btManager.sendCommand(cmd)
+                delay(POLL_INTERVAL)
+            }
+        }
+    }
+
+    fun stopPolling() {
+        pollingJob?.cancel()
+        pollingJob = null
+        _isPolling.postValue(false)
+    }
+
+    private fun addToHistory(data: ProbeData) {
+        // Jangan simpan OPEN/SHORT ke riwayat — hanya nilai valid
+        if (data.mode == "OPEN" || data.mode == "SHORT") return
+        val current = _history.value?.toMutableList() ?: mutableListOf()
+        current.add(0, data)
+        if (current.size > HISTORY_MAX) {
+            current.removeAt(current.size - 1)
+        }
+        _history.postValue(current)
+    }
+
+    fun clearHistory() {
+        _history.value = emptyList()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopPolling()
+    }
+}
+---
+
+================================================================
+FASE EDIT — FILE 2:
+REPLACE TOTAL file:
+  app/src/main/java/com/rphone/v3/ui/probe/ProbeFragment.kt
+
+---
+package com.rphone.v3.ui.probe
+
+import android.graphics.Color
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import com.rphone.v3.MainActivity
+import com.rphone.v3.R
+import com.rphone.v3.databinding.FragmentProbeBinding
+import com.rphone.v3.model.BtStatus
+import com.rphone.v3.model.ProbeData
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+class ProbeFragment : Fragment() {
+
+    private var _binding: FragmentProbeBinding? = null
+    private val binding get() = _binding!!
+
+    private val viewModel: ProbeViewModel by viewModels()
+
+    private val colorVolt     = Color.parseColor("#10B981")
+    private val colorDiode    = Color.parseColor("#F59E0B")
+    private val colorOhm      = Color.parseColor("#00D4FF")
+    private val colorOpen     = Color.parseColor("#64748B")
+    private val colorShort    = Color.parseColor("#EF4444")
+    private val colorInactive = Color.parseColor("#334155")
+
+    private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        _binding = FragmentProbeBinding.inflate(inflater, container, false)
+        return binding.root
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        val mainActivity = requireActivity() as MainActivity
+        viewModel.startObserving(mainActivity.bluetoothManager)
+
+        setupModeButtons()
+        setupPollingButton(mainActivity)
+        observeViewModel()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Auto start polling saat fragment kembali visible
+        if (viewModel.btStatus.value == BtStatus.CONNECTED) {
+            viewModel.startPolling()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Stop polling saat fragment tidak visible
+        viewModel.stopPolling()
+    }
+
+    private fun setupModeButtons() {
+        binding.btnModeVolt.setOnClickListener {
+            viewModel.setActiveMode("VOLT")
+        }
+        binding.btnModeDiode.setOnClickListener {
+            viewModel.setActiveMode("DIODE")
+        }
+        binding.btnModeOhm.setOnClickListener {
+            viewModel.setActiveMode("OHM")
+        }
+    }
+
+    private fun setupPollingButton(mainActivity: MainActivity) {
+        binding.btnUkur.setOnClickListener {
+            if (viewModel.btStatus.value != BtStatus.CONNECTED) {
+                // Feedback disconnected
+                binding.btnUkur.text = "✗ TIDAK TERHUBUNG"
+                binding.btnUkur.postDelayed({
+                    val isPolling = viewModel.isPolling.value == true
+                    binding.btnUkur.text = if (isPolling) "■ STOP" else "▶ START"
+                }, 1500)
+                return@setOnClickListener
+            }
+
+            if (viewModel.isPolling.value == true) {
+                viewModel.stopPolling()
+            } else {
+                viewModel.startPolling()
+            }
+        }
+    }
+
+    private fun observeViewModel() {
+        viewModel.activeMode.observe(viewLifecycleOwner) { mode ->
+            updateModeUI(mode)
+        }
+
+        viewModel.probeData.observe(viewLifecycleOwner) { data ->
+            data ?: return@observe
+            updateResultUI(data)
+        }
+
+        viewModel.isPolling.observe(viewLifecycleOwner) { polling ->
+            updatePollingButton(polling)
+        }
+
+        viewModel.btStatus.observe(viewLifecycleOwner) { status ->
+            val connected = status == BtStatus.CONNECTED
+            binding.statusDotProbe.setBackgroundResource(
+                if (connected) R.drawable.bg_badge_active
+                else R.drawable.bg_badge
+            )
+            // Auto start polling saat BT baru connect
+            if (connected && viewModel.isPolling.value == false) {
+                viewModel.startPolling()
+            }
+        }
+
+        viewModel.history.observe(viewLifecycleOwner) { list ->
+            updateHistoryUI(list)
+        }
+    }
+
+    private fun updatePollingButton(isPolling: Boolean) {
+        val accentColor = when (viewModel.activeMode.value) {
+            "VOLT"  -> colorVolt
+            "DIODE" -> colorDiode
+            "OHM"   -> colorOhm
+            else    -> colorVolt
+        }
+        if (isPolling) {
+            binding.btnUkur.text = "■ STOP"
+            binding.btnUkur.setTextColor(Color.parseColor("#EF4444"))
+        } else {
+            binding.btnUkur.text = "▶ START"
+            binding.btnUkur.setTextColor(accentColor)
+        }
+    }
+
+    private fun updateModeUI(mode: String) {
+        val btnList = listOf(binding.btnModeVolt, binding.btnModeDiode, binding.btnModeOhm)
+        btnList.forEach { btn ->
+            btn.setTextColor(colorInactive)
+            btn.setBackgroundResource(0)
+        }
+
+        val accentColor: Int
+        val activeBtn: TextView
+        val labelText: String
+        val unitText: String
+
+        when (mode) {
+            "VOLT" -> {
+                accentColor = colorVolt
+                activeBtn   = binding.btnModeVolt
+                labelText   = "TEGANGAN"
+                unitText    = "V"
+            }
+            "DIODE" -> {
+                accentColor = colorDiode
+                activeBtn   = binding.btnModeDiode
+                labelText   = "VDROP"
+                unitText    = "mV"
+            }
+            "OHM" -> {
+                accentColor = colorOhm
+                activeBtn   = binding.btnModeOhm
+                labelText   = "RESISTANSI"
+                unitText    = "Ω"
+            }
+            else -> return
+        }
+
+        activeBtn.setTextColor(accentColor)
+        activeBtn.setBackgroundResource(R.drawable.bg_nav_active_probe)
+        binding.tvProbeLabel.text = labelText
+        binding.tvProbeUnit.text  = unitText
+        binding.tvProbeValue.setTextColor(accentColor)
+        updatePollingButton(viewModel.isPolling.value == true)
+    }
+
+    private fun updateResultUI(data: ProbeData) {
+        val (displayValue, color) = when (data.mode) {
+            "VOLT"  -> Pair(data.display, colorVolt)
+            "DIODE" -> Pair(data.display, colorDiode)
+            "OHM"   -> Pair(data.display, colorOhm)
+            "OPEN"  -> Pair("OL",         colorOpen)
+            "SHORT" -> Pair("0",           colorShort)
+            else    -> Pair(data.display, colorOpen)
+        }
+        binding.tvProbeValue.text = displayValue
+        binding.tvProbeValue.setTextColor(color)
+        binding.tvProbeTimestamp.text = timeFmt.format(Date())
+    }
+
+    private fun updateHistoryUI(list: List<ProbeData>) {
+        val containers = listOf(
+            binding.itemRiwayat0, binding.itemRiwayat1, binding.itemRiwayat2,
+            binding.itemRiwayat3, binding.itemRiwayat4
+        )
+        val modes = listOf(
+            binding.tvRiwayatMode0, binding.tvRiwayatMode1, binding.tvRiwayatMode2,
+            binding.tvRiwayatMode3, binding.tvRiwayatMode4
+        )
+        val values = listOf(
+            binding.tvRiwayatValue0, binding.tvRiwayatValue1, binding.tvRiwayatValue2,
+            binding.tvRiwayatValue3, binding.tvRiwayatValue4
+        )
+        val times = listOf(
+            binding.tvRiwayatTime0, binding.tvRiwayatTime1, binding.tvRiwayatTime2,
+            binding.tvRiwayatTime3, binding.tvRiwayatTime4
+        )
+
+        binding.tvRiwayatKosong.visibility =
+            if (list.isEmpty()) View.VISIBLE else View.GONE
+
+        list.forEachIndexed { i, data ->
+            if (i >= 5) return@forEachIndexed
+            containers[i].visibility = View.VISIBLE
+            modes[i].text  = data.mode
+            values[i].text = data.display
+            values[i].setTextColor(modeColor(data.mode))
+            times[i].text  = timeFmt.format(Date())
+        }
+
+        for (i in list.size until 5) {
+            containers[i].visibility = View.GONE
+        }
+    }
+
+    private fun modeColor(mode: String): Int = when (mode) {
+        "VOLT"  -> colorVolt
+        "DIODE" -> colorDiode
+        "OHM"   -> colorOhm
+        "OPEN"  -> colorOpen
+        "SHORT" -> colorShort
+        else    -> colorOpen
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
+    }
+}
+---
+
+================================================================
+FASE VERIFIKASI:
+1. Pastikan ProbeViewModel tidak ada duplicate fun setActiveMode()
+   → Cek: ada 2 deklarasi setActiveMode di kode di atas — HAPUS yang pertama
+     (yang tidak ada blok restart polling), sisakan hanya yang satu ini:
+     fun setActiveMode(mode: String) {
+         _activeMode.value = mode
+         if (_isPolling.value == true) { stopPolling(); startPolling() }
+     }
+2. Pastikan import Job ada di ProbeViewModel
+3. Pastikan onResume() dan onPause() ada di ProbeFragment
+4. Pastikan R.drawable.bg_badge_active — jika tidak ada, ganti dengan bg_badge
+5. Build → 0 error
+
+================================================================
+FASE BUILD:
+1. Build project → 0 error
+2. Run → buka PROBE → hubungkan BT → polling otomatis start
+3. Tombol berubah "▶ START" / "■ STOP"
+4. Pindah ke fragment lain → polling berhenti otomatis
+5. Kembali ke PROBE → polling start lagi
+6. Simpan prompt ini ke file: prompt_P06_AutoPolling.txt
+
+================================================================

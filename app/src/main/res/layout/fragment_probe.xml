@@ -1,0 +1,494 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#050810">
+
+    <!-- TOP BAR (36dp) -->
+    <LinearLayout
+        android:id="@+id/topBarProbe"
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:background="#080C14"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp">
+
+        <View
+            android:layout_width="6dp"
+            android:layout_height="6dp"
+            android:background="@drawable/bg_badge" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="R-PHONE V3"
+            android:textColor="#E2E8F0"
+            android:textSize="12sp"
+            android:fontFamily="@font/rajdhani_bold"
+            android:layout_marginStart="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_nav_active_probe"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="3dp"
+            android:text="PROBE MODE"
+            android:textColor="#00B4D8"
+            android:textSize="11sp"
+            android:fontFamily="@font/rajdhani_bold" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+    </LinearLayout>
+
+    <!-- DIVIDER -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#0D1423" />
+
+    <!-- ═══════════════════════════════════════════════════════════
+         BARIS ATAS: 2 KOLOM
+         ═══════════════════════════════════════════════════════════ -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <!-- ── KOLOM KIRI: Nilai Utama Besar + Tab Mode + Info USB/PSU ── -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.38"
+            android:orientation="vertical"
+            android:padding="10dp">
+
+            <!-- ───────────────────────────────────────────────────
+                 AREA KIRI ATAS — NILAI UTAMA BESAR
+                 AutoSize Orbitron, match_parent, no fixed height
+                 ─────────────────────────────────────────────────── -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_metric_card"
+                android:padding="12dp"
+                android:orientation="vertical">
+
+                <!-- Label mode (TEGANGAN / DIODA / OHM) -->
+                <TextView
+                    android:id="@+id/tvProbeLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="TEGANGAN"
+                    android:textColor="#64748B"
+                    android:textSize="11sp"
+                    android:textAllCaps="true"
+                    android:letterSpacing="0.12"
+                    android:fontFamily="@font/rajdhani_semibold" />
+
+                <!-- Nilai utama autoSize -->
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/tvProbeValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:text="0.000"
+                    android:textColor="#334155"
+                    android:gravity="center"
+                    android:fontFamily="@font/technology"
+                    android:includeFontPadding="false"
+                    app:autoSizeTextType="uniform"
+                    app:autoSizeMinTextSize="24sp"
+                    app:autoSizeMaxTextSize="120sp"
+                    app:autoSizeStepGranularity="2sp" />
+
+                <!-- Info USB kiri, PSU kanan -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <!-- USB di kiri -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="USB"
+                        android:textColor="#22C55E"
+                        android:textSize="9sp"
+                        android:fontFamily="@font/rajdhani_bold"
+                        android:letterSpacing="0.12" />
+
+                    <TextView
+                        android:id="@+id/tvUsbVoltage"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0.000"
+                        android:textColor="#22C55E"
+                        android:textSize="13sp"
+                        android:fontFamily="@font/technology"
+                        android:includeFontPadding="false"
+                        android:layout_marginStart="4dp" />
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+
+                    <!-- PSU di kanan -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="PSU"
+                        android:textColor="#22C55E"
+                        android:textSize="9sp"
+                        android:fontFamily="@font/rajdhani_bold"
+                        android:letterSpacing="0.12" />
+
+                    <TextView
+                        android:id="@+id/tvPsuCh1V"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0.000"
+                        android:textColor="#22C55E"
+                        android:textSize="13sp"
+                        android:fontFamily="@font/technology"
+                        android:includeFontPadding="false"
+                        android:layout_marginStart="4dp" />
+
+                </LinearLayout>
+
+                <!-- tvProbeUnit disembunyikan, masih dipakai Kotlin -->
+                <TextView
+                    android:id="@+id/tvProbeUnit"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="V"
+                    android:visibility="gone"
+                    android:fontFamily="@font/rajdhani_regular" />
+
+            </LinearLayout>
+
+            <!-- ───────────────────────────────────────────────────
+                 AREA KIRI BAWAH — KONTROL
+                 ─────────────────────────────────────────────────── -->
+
+            <!-- Tab VOLT / DIODA / OHM -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tabVolt"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_nav_active_probe"
+                    android:gravity="center"
+                    android:text="VOLT"
+                    android:textColor="#00B4D8"
+                    android:textSize="12sp"
+                    android:fontFamily="@font/rajdhani_bold"
+                    android:layout_marginEnd="3dp" />
+
+                <TextView
+                    android:id="@+id/tabDiode"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_metric_card"
+                    android:gravity="center"
+                    android:text="DIODA"
+                    android:textColor="#334155"
+                    android:textSize="12sp"
+                    android:fontFamily="@font/rajdhani_bold"
+                    android:layout_marginHorizontal="3dp" />
+
+                <TextView
+                    android:id="@+id/tabOhm"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_metric_card"
+                    android:gravity="center"
+                    android:text="OHM"
+                    android:textColor="#334155"
+                    android:textSize="12sp"
+                    android:fontFamily="@font/rajdhani_bold"
+                    android:layout_marginStart="3dp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- ── KOLOM KANAN: Riwayat redesign tanpa card ── -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.62"
+            android:orientation="vertical"
+            android:paddingTop="10dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="10dp"
+            android:paddingStart="6dp">
+
+            <!-- ─────────────────────────────────────────────────────
+                 HEADER RIWAYAT + TOMBOL (1 baris sejajar)
+                 ───────────────────────────────────────────────────── -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="28dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="RIWAYAT"
+                    android:textColor="#64748B"
+                    android:textSize="10sp"
+                    android:textAllCaps="true"
+                    android:fontFamily="@font/rajdhani_semibold" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <!-- TTS Toggle -->
+                <TextView
+                    android:id="@+id/btnTtsToggle"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:gravity="center"
+                    android:text="🔇"
+                    android:textSize="12sp"
+                    android:background="@drawable/bg_metric_card"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:alpha="0.5"
+                    android:layout_marginEnd="4dp" />
+
+                <!-- COMPARE -->
+                <TextView
+                    android:id="@+id/btnCompare"
+                    android:layout_width="wrap_content"
+                    android:layout_height="28dp"
+                    android:gravity="center"
+                    android:text="COMPARE"
+                    android:textColor="#F59E0B"
+                    android:textSize="9sp"
+                    android:fontFamily="@font/rajdhani_bold"
+                    android:background="@drawable/bg_metric_card"
+                    android:paddingHorizontal="8dp"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginEnd="4dp" />
+
+                <!-- SIMPAN PASIF -->
+                <TextView
+                    android:id="@+id/btnSimpanPassif"
+                    android:layout_width="wrap_content"
+                    android:layout_height="28dp"
+                    android:gravity="center"
+                    android:text="PASIF"
+                    android:textColor="#00B4D8"
+                    android:textSize="9sp"
+                    android:fontFamily="@font/rajdhani_bold"
+                    android:background="@drawable/bg_metric_card"
+                    android:paddingHorizontal="8dp"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginEnd="4dp" />
+
+                <!-- SIMPAN AKTIF -->
+                <TextView
+                    android:id="@+id/btnSimpanAktif"
+                    android:layout_width="wrap_content"
+                    android:layout_height="28dp"
+                    android:gravity="center"
+                    android:text="AKTIF"
+                    android:textColor="#00B4D8"
+                    android:textSize="9sp"
+                    android:fontFamily="@font/rajdhani_bold"
+                    android:background="@drawable/bg_metric_card"
+                    android:paddingHorizontal="8dp"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+            </LinearLayout>
+
+            <!-- Divider tipis di bawah header -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#0D1423"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="6dp" />
+
+            <!-- ─────────────────────────────────────────────────────
+                 2 KOLOM RIWAYAT langsung tanpa card wrapper
+                 ───────────────────────────────────────────────────── -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="horizontal">
+
+                <!-- Kolom Kiri: PASIF (DIODE / OHM) -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:layout_marginEnd="4dp">
+
+                    <!-- Header kolom PASIF -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="3dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="PASIF"
+                            android:textColor="#64748B"
+                            android:textSize="9sp"
+                            android:fontFamily="@font/rajdhani_bold"
+                            android:textAllCaps="true" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="DIODE / OHM"
+                            android:textColor="#334155"
+                            android:textSize="8sp"
+                            android:fontFamily="@font/rajdhani_semibold" />
+
+                    </LinearLayout>
+
+                    <!-- Divider bawah header -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#0D1423"
+                        android:layout_marginBottom="3dp" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rvRiwayatPassif"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:nestedScrollingEnabled="false" />
+
+                    <TextView
+                        android:id="@+id/tvRiwayatPassifKosong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:text="Belum ada data"
+                        android:textColor="#334155"
+                        android:textSize="10sp"
+                        android:fontFamily="@font/rajdhani_medium"
+                        android:paddingVertical="8dp"
+                        android:visibility="visible" />
+
+                </LinearLayout>
+
+                <!-- Divider vertikal tipis -->
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="match_parent"
+                    android:background="#0D1423"
+                    android:layout_marginHorizontal="4dp" />
+
+                <!-- Kolom Kanan: AKTIF (VOLT) -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:layout_marginStart="4dp">
+
+                    <!-- Header kolom AKTIF -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="3dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="AKTIF"
+                            android:textColor="#64748B"
+                            android:textSize="9sp"
+                            android:fontFamily="@font/rajdhani_bold"
+                            android:textAllCaps="true" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="VOLT"
+                            android:textColor="#334155"
+                            android:textSize="8sp"
+                            android:fontFamily="@font/rajdhani_semibold" />
+
+                    </LinearLayout>
+
+                    <!-- Divider bawah header -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#0D1423"
+                        android:layout_marginBottom="3dp" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rvRiwayatAktif"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:nestedScrollingEnabled="false" />
+
+                    <TextView
+                        android:id="@+id/tvRiwayatAktifKosong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:text="Belum ada data"
+                        android:textColor="#334155"
+                        android:textSize="10sp"
+                        android:fontFamily="@font/rajdhani_medium"
+                        android:paddingVertical="8dp"
+                        android:visibility="visible" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</LinearLayout>

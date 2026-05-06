@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#050810">
+
+    <!-- ═══════════════ TOP BAR ═══════════════ -->
+    <LinearLayout
+        android:id="@+id/topBarUart"
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:background="#080C14"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp">
+
+        <!-- Status dot -->
+        <View
+            android:id="@+id/statusDotUart"
+            android:layout_width="6dp"
+            android:layout_height="6dp"
+            android:background="@drawable/bg_badge" />
+
+        <!-- App name -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="R-PHONE V3"
+            android:textColor="#E2E8F0"
+            android:textSize="12sp"
+            android:fontFamily="@font/rajdhani_bold"
+            android:layout_marginStart="8dp" />
+
+        <!-- Mode badge -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_nav_active_uart"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
+            android:text="UART READER"
+            android:textColor="#14B8A6"
+            android:textSize="11sp"
+            android:fontFamily="@font/rajdhani_bold" />
+
+        <!-- Spacer -->
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <!-- Rules button -->
+        <TextView
+            android:id="@+id/btnCustomRules"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="RULES"
+            android:textColor="#8B5CF6"
+            android:textSize="9sp"
+            android:fontFamily="@font/rajdhani_semibold"
+            android:background="@drawable/bg_card"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:layout_marginEnd="6dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground" />
+
+        <!-- Baud Rate button -->
+        <TextView
+            android:id="@+id/btnBaudRate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="115200 baud ▾"
+            android:textColor="#14B8A6"
+            android:textSize="9sp"
+            android:fontFamily="@font/jetbrains_mono_regular"
+            android:background="@drawable/bg_card"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground" />
+
+    </LinearLayout>
+
+    <!-- Garis bawah top bar -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#0D1423" />
+
+    <!-- ═══════════════ KONTEN UTAMA 50/50 ═══════════════ -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <!-- ─── PANEL KIRI (50%) ─── -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <!-- Card: Info Teknisi DINAMIS -->
+            <ScrollView
+                android:id="@+id/scrollPanelKiri"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:layout_marginBottom="6dp"
+                android:background="@drawable/bg_card"
+                android:fillViewport="true">
+
+                <LinearLayout
+                    android:id="@+id/containerKategori"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="8dp" />
+            </ScrollView>
+
+            <!-- Tombol 3-state: btnStreamUart -->
+            <TextView
+                android:id="@+id/btnStreamUart"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:gravity="center"
+                android:text="▶ AUTO STREAM UART"
+                android:textColor="#0D1423"
+                android:textSize="11sp"
+                android:fontFamily="@font/rajdhani_bold"
+                android:letterSpacing="0.05"
+                android:background="@drawable/bg_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground" />
+
+        </LinearLayout>
+
+        <!-- Divider vertikal -->
+        <View
+            android:layout_width="1dp"
+            android:layout_height="match_parent"
+            android:background="#0D1423" />
+
+        <!-- ─── PANEL KANAN (50%) ─── -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <!-- Header kanan — RAW LOG | SAVE | CLEAR -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="RAW LOG"
+                    android:textColor="#64748B"
+                    android:textSize="11sp"
+                    android:fontFamily="@font/rajdhani_bold"
+                    android:letterSpacing="0.08" />
+
+                <TextView
+                    android:id="@+id/btnSaveLog"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="SAVE"
+                    android:textColor="#14B8A6"
+                    android:textSize="9sp"
+                    android:fontFamily="@font/rajdhani_semibold"
+                    android:background="@drawable/bg_card"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:layout_marginEnd="6dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground" />
+
+                <TextView
+                    android:id="@+id/btnClearLog"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="CLEAR"
+                    android:textColor="#334155"
+                    android:textSize="9sp"
+                    android:fontFamily="@font/rajdhani_semibold"
+                    android:background="@drawable/bg_card"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground" />
+
+            </LinearLayout>
+
+            <!-- Area log -->
+            <ScrollView
+                android:id="@+id/scrollLog"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="@color/bg_main"
+                android:fillViewport="true">
+
+                <TextView
+                    android:id="@+id/tvRawLog"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textColor="#94A3B8"
+                    android:textSize="8sp"
+                    android:fontFamily="@font/jetbrains_mono_regular"
+                    android:lineSpacingExtra="2dp"
+                    android:padding="6dp"
+                    android:textIsSelectable="true" />
+
+            </ScrollView>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</LinearLayout>

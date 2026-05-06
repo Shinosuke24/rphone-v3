@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:minWidth="260dp"
+    android:orientation="vertical"
+    android:background="@drawable/bg_dialog_dark"
+    android:padding="16dp">
+
+    <!-- Judul dialog -->
+    <TextView
+        android:id="@+id/tvJudulDialog"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="PILIH PROFIL"
+        android:textColor="#E2E8F0"
+        android:textSize="12sp"
+        android:fontFamily="@font/rajdhani_bold"
+        android:letterSpacing="0.10"
+        android:layout_marginBottom="12dp"/>
+
+    <!-- Search bar -->
+    <EditText
+        android:id="@+id/etSearchProfil"
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:hint="Cari profil..."
+        android:textColorHint="#64748B"
+        android:textColor="#E2E8F0"
+        android:textSize="11sp"
+        android:fontFamily="@font/rajdhani_regular"
+        android:background="@drawable/bg_card"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:inputType="text"
+        android:imeOptions="actionSearch"
+        android:layout_marginBottom="10dp"/>
+
+    <!-- List profil -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvProfilDialog"
+        android:layout_width="match_parent"
+        android:layout_height="220dp"
+        android:clipToPadding="false"/>
+
+    <!-- Tombol batal -->
+    <TextView
+        android:id="@+id/btnBatalPilihProfil"
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:text="BATAL"
+        android:textColor="#64748B"
+        android:textSize="11sp"
+        android:fontFamily="@font/rajdhani_bold"
+        android:gravity="center"
+        android:background="@drawable/bg_card"
+        android:layout_marginTop="10dp"
+        android:clickable="true"
+        android:focusable="true"/>
+
+</LinearLayout>

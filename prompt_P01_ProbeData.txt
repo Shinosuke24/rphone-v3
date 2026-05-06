@@ -1,0 +1,60 @@
+================================================================
+PROMPT P01 — BUAT FILE BARU: ProbeData.kt
+R-Phone V3 | Probe Meter Android
+================================================================
+
+FASE SCAN:
+1. Buat Git commit dengan pesan "feat: sebelum tambah ProbeData.kt"
+2. Scan file yang sudah ada:
+   - app/src/main/java/com/rphone/v3/model/SensorData.kt
+     (pelajari pola data class: UsbData, PsuData, BootSample)
+3. Pastikan package com.rphone.v3 tidak diubah
+
+================================================================
+FASE EDIT:
+Buat file BARU:
+  app/src/main/java/com/rphone/v3/model/ProbeData.kt
+
+Isi file (REPLACE TOTAL — tulis persis seperti ini):
+
+---
+package com.rphone.v3.model
+
+/**
+ * Data hasil pengukuran Probe Meter dari ESP32.
+ *
+ * Format JSON masuk dari ESP32:
+ *   GET_VOLT  : {"probe":"VOLT","volt":3.280,"display":"3.280V"}
+ *   GET_DIODE : {"probe":"DIODE","vdrop":0.648,"display":"648mV"}
+ *               {"probe":"OPEN","display":"OL"}
+ *               {"probe":"SHORT","display":"0mV"}
+ *   GET_OHM   : {"probe":"OHM","ohm":4700.0,"display":"4.70KΩ"}
+ *               {"probe":"OPEN","display":"OL"}
+ *               {"probe":"SHORT","display":"0Ω"}
+ *
+ * Field mode mengikuti nilai "probe" dari JSON:
+ *   "VOLT", "DIODE", "OHM", "OPEN", "SHORT"
+ */
+data class ProbeData(
+    val mode: String = "",        // "VOLT" | "DIODE" | "OHM" | "OPEN" | "SHORT"
+    val volt: Float = 0f,         // diisi saat mode VOLT (dalam Volt)
+    val vdrop: Float = 0f,        // diisi saat mode DIODE (dalam Volt, misal 0.648)
+    val ohm: Float = 0f,          // diisi saat mode OHM (dalam Ohm)
+    val display: String = ""      // string siap tampil dari ESP32, misal "3.280V", "648mV", "4.70KΩ", "OL", "0Ω"
+)
+---
+
+================================================================
+FASE VERIFIKASI:
+1. Pastikan package = com.rphone.v3.model
+2. Pastikan semua 5 field ada: mode, volt, vdrop, ohm, display
+3. Pastikan default value semua field sudah ada
+4. Pastikan tidak ada import yang tidak dipakai
+5. Tidak ada perubahan di SensorData.kt atau file lain
+
+================================================================
+FASE BUILD:
+1. Build project → pastikan 0 error, 0 warning terkait file baru
+2. Simpan prompt ini ke file: prompt_P01_ProbeData.txt
+
+================================================================

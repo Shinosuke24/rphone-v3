@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingVertical="5dp"
+    android:paddingHorizontal="6dp">
+
+    <!-- No (fixed 28dp) -->
+    <TextView
+        android:id="@+id/tvItemNo"
+        android:layout_width="28dp"
+        android:layout_height="wrap_content"
+        android:text="1"
+        android:textColor="#475569"
+        android:textSize="11sp"
+        android:fontFamily="@font/jetbrains_mono_bold"
+        android:gravity="center" />
+
+    <!-- Kaki (weight 1.5) -->
+    <TextView
+        android:id="@+id/tvItemKaki"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1.5"
+        android:text="Kaki 1"
+        android:textColor="#00B4D8"
+        android:textSize="11sp"
+        android:fontFamily="@font/rajdhani_semibold"
+        android:ellipsize="end"
+        android:maxLines="1" />
+
+    <!-- Mode (weight 1) -->
+    <TextView
+        android:id="@+id/tvItemMode"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="VOLT"
+        android:textColor="#00B4D8"
+        android:textSize="11sp"
+        android:fontFamily="@font/rajdhani_bold"
+        android:gravity="center" />
+
+    <!-- Nilai (weight 1.2, gravity end, paddingEnd agar tidak terpotong) -->
+    <TextView
+        android:id="@+id/tvItemValue"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1.2"
+        android:text="0.461V"
+        android:textColor="#00B4D8"
+        android:textSize="11sp"
+        android:fontFamily="@font/jetbrains_mono_bold"
+        android:gravity="end"
+        android:paddingEnd="4dp" />
+
+</LinearLayout>

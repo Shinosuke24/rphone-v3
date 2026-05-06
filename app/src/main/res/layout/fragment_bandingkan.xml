@@ -1,0 +1,447 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#050810">
+
+    <!-- TOP BAR (36dp) -->
+    <LinearLayout
+        android:id="@+id/topBarBandingkan"
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:background="#080C14"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <View
+            android:layout_width="6dp"
+            android:layout_height="6dp"
+            android:background="@drawable/bg_badge"
+            app:tint="#10B981"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="R-PHONE V3"
+            android:textColor="#E2E8F0"
+            android:textSize="12sp"
+            android:fontFamily="@font/rajdhani_bold"
+            android:layout_marginStart="8dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_nav_active_waveid"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="3dp"
+            android:text="BANDINGKAN"
+            android:textColor="#10B981"
+            android:textSize="11sp"
+            android:fontFamily="@font/rajdhani_bold"/>
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1"/>
+
+    </LinearLayout>
+
+    <View
+        android:id="@+id/topBarDividerBand"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#0D1423"
+        app:layout_constraintTop_toBottomOf="@id/topBarBandingkan"/>
+
+    <!-- CONTAINER (2 kolom) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:orientation="horizontal"
+        app:layout_constraintTop_toBottomOf="@id/topBarDividerBand"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <!-- KOLOM KIRI (weight 0.38) -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.38"
+            android:orientation="vertical">
+
+            <!-- MODE SWITCHER TABS -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#080C14"
+                android:orientation="horizontal"
+                android:padding="4dp">
+                <TextView
+                    android:id="@+id/tabPsuBandingkan"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:paddingVertical="8dp"
+                    android:text="PSU MODE"
+                    android:textColor="#10B981"
+                    android:textSize="11sp"
+                    android:fontFamily="@font/rajdhani_bold"
+                    android:clickable="true"
+                    android:focusable="true"/>
+                <TextView
+                    android:id="@+id/tabUsbBandingkan"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:paddingVertical="8dp"
+                    android:text="USB MODE"
+                    android:textColor="#334155"
+                    android:textSize="11sp"
+                    android:fontFamily="@font/rajdhani_bold"
+                    android:clickable="true"
+                    android:focusable="true"/>
+            </LinearLayout>
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:fillViewport="true"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="8dp">
+
+                    <!-- PROFIL A -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="PROFIL A"
+                        android:textColor="#00D4FF"
+                        android:textSize="10sp"
+                        android:textAllCaps="true"
+                        android:fontFamily="@font/rajdhani_semibold"/>
+
+                    <LinearLayout
+                        android:id="@+id/cardProfilA"
+                        android:layout_width="match_parent"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_metric_card"
+                        android:padding="8dp"
+                        android:gravity="center"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:layout_marginBottom="5dp"
+                        android:foreground="?attr/selectableItemBackground">
+
+                        <TextView
+                            android:id="@+id/tvProfilALabel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Ketuk untuk pilih"
+                            android:textColor="#64748B"
+                            android:textSize="12sp"
+                            android:fontFamily="@font/rajdhani_regular"/>
+
+                        <TextView
+                            android:id="@+id/tvProfilADetail"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text=""
+                            android:textColor="#00D4FF"
+                            android:textSize="10sp"
+                            android:fontFamily="@font/rajdhani_regular"
+                            android:visibility="gone"/>
+
+                    </LinearLayout>
+
+                    <!-- PROFIL B -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="PROFIL B"
+                        android:textColor="#A78BFA"
+                        android:textSize="10sp"
+                        android:textAllCaps="true"
+                        android:fontFamily="@font/rajdhani_semibold"/>
+
+                    <LinearLayout
+                        android:id="@+id/cardProfilB"
+                        android:layout_width="match_parent"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_metric_card"
+                        android:padding="8dp"
+                        android:gravity="center"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:layout_marginBottom="5dp"
+                        android:foreground="?attr/selectableItemBackground">
+
+                        <TextView
+                            android:id="@+id/tvProfilBLabel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Ketuk untuk pilih"
+                            android:textColor="#64748B"
+                            android:textSize="12sp"
+                            android:fontFamily="@font/rajdhani_regular"/>
+
+                        <TextView
+                            android:id="@+id/tvProfilBDetail"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text=""
+                            android:textColor="#A78BFA"
+                            android:textSize="10sp"
+                            android:fontFamily="@font/rajdhani_regular"
+                            android:visibility="gone"/>
+
+                    </LinearLayout>
+
+                    <!-- Card skor kemiripan -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="80dp"
+                        android:background="@drawable/bg_metric_card"
+                        android:padding="10dp"
+                        android:orientation="vertical"
+                        android:layout_marginBottom="5dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="SKOR KEMIRIPAN"
+                            android:textColor="#64748B"
+                            android:textSize="10sp"
+                            android:textAllCaps="true"
+                            android:fontFamily="@font/rajdhani_semibold"/>
+
+                        <TextView
+                            android:id="@+id/tvLabelKemiripan"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="—"
+                            android:textColor="#64748B"
+                            android:textSize="11sp"
+                            android:fontFamily="@font/rajdhani_regular"
+                            android:layout_marginTop="2dp"/>
+
+                        <TextView
+                            android:id="@+id/tvSkorKemiripan"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="—"
+                            android:textColor="#E2E8F0"
+                            android:textSize="24sp"
+                            android:fontFamily="@font/jetbrains_mono_bold"
+                            android:layout_marginTop="2dp"/>
+
+                    </LinearLayout>
+
+                    <!-- Stats row chips -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="5dp">
+
+                        <!-- Chip A -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_card_profil_a"
+                            android:padding="6dp"
+                            android:orientation="vertical"
+                            android:gravity="center"
+                            android:layout_marginEnd="4dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="PUNCAK A"
+                                android:textColor="#00D4FF"
+                                android:textSize="8sp"
+                                android:fontFamily="@font/rajdhani_bold"/>
+
+                            <TextView
+                                android:id="@+id/tvPeakA"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="—"
+                                android:textColor="#E2E8F0"
+                                android:textSize="12sp"
+                                android:fontFamily="@font/jetbrains_mono_bold"/>
+
+                        </LinearLayout>
+
+                        <!-- Chip B -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_nav_active_psu"
+                            android:padding="6dp"
+                            android:orientation="vertical"
+                            android:gravity="center"
+                            android:layout_marginEnd="4dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="PUNCAK B"
+                                android:textColor="#A78BFA"
+                                android:textSize="8sp"
+                                android:fontFamily="@font/rajdhani_bold"/>
+
+                            <TextView
+                                android:id="@+id/tvPeakB"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="—"
+                                android:textColor="#E2E8F0"
+                                android:textSize="12sp"
+                                android:fontFamily="@font/jetbrains_mono_bold"/>
+
+                        </LinearLayout>
+
+                        <!-- Chip Delta -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_metric_card"
+                            android:padding="6dp"
+                            android:orientation="vertical"
+                            android:gravity="center">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="SELISIH"
+                                android:textColor="#64748B"
+                                android:textSize="8sp"
+                                android:fontFamily="@font/rajdhani_bold"/>
+
+                            <TextView
+                                android:id="@+id/tvSelisih"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="—"
+                                android:textColor="#E2E8F0"
+                                android:textSize="12sp"
+                                android:fontFamily="@font/jetbrains_mono_bold"/>
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+            </ScrollView>
+
+            <!-- Tombol Bandingkan -->
+            <TextView
+                android:id="@+id/btnBandingkan"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginHorizontal="10dp"
+                android:layout_marginBottom="10dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_action_waveid"
+                android:gravity="center"
+                android:text="BANDINGKAN"
+                android:textColor="#10B981"
+                android:textSize="15sp"
+                android:textAllCaps="true"
+                android:fontFamily="@font/rajdhani_bold"/>
+
+        </LinearLayout>
+
+        <!-- KOLOM KANAN (weight 0.62) -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.62"
+            android:orientation="vertical"
+            android:padding="10dp">
+
+            <!-- Legend row -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="24dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
+
+                <View
+                    android:layout_width="16dp"
+                    android:layout_height="3dp"
+                    android:background="#00D4FF"
+                    android:layout_marginEnd="5dp"/>
+
+                <TextView
+                    android:id="@+id/tvLegendA"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Profil A"
+                    android:textColor="#00D4FF"
+                    android:textSize="10sp"
+                    android:fontFamily="@font/rajdhani_regular"/>
+
+                <View
+                    android:layout_width="16dp"
+                    android:layout_height="3dp"
+                    android:background="#7C3AED"
+                    android:layout_marginEnd="5dp"/>
+
+                <TextView
+                    android:id="@+id/tvLegendB"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Profil B"
+                    android:textColor="#A78BFA"
+                    android:textSize="10sp"
+                    android:fontFamily="@font/rajdhani_regular"/>
+
+            </LinearLayout>
+
+            <!-- Overlay Waveform -->
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_chart_area">
+
+                <com.rphone.v3.view.WaveformView
+                    android:id="@+id/waveformA"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layerType="software"/>
+
+                <com.rphone.v3.view.WaveformView
+                    android:id="@+id/waveformB"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layerType="software"
+                    android:background="@android:color/transparent"/>
+
+            </FrameLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

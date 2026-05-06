@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="6dp"
+    android:paddingVertical="9dp"
+    android:minHeight="40dp">
+
+    <!-- No -->
+    <TextView
+        android:id="@+id/tvCNo"
+        android:layout_width="28dp"
+        android:layout_height="wrap_content"
+        android:text="1"
+        android:textColor="#475569"
+        android:textSize="10sp"
+        android:fontFamily="@font/jetbrains_mono_regular"
+        android:gravity="center" />
+
+    <!-- Kaki -->
+    <TextView
+        android:id="@+id/tvCKaki"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1.5"
+        android:text="Kaki1"
+        android:textColor="#00D4FF"
+        android:textSize="11sp"
+        android:fontFamily="@font/jetbrains_mono_regular"
+        android:ellipsize="end"
+        android:maxLines="1" />
+
+    <!-- Referensi -->
+    <TextView
+        android:id="@+id/tvCRef"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1.2"
+        android:text="—"
+        android:textColor="#00D4FF"
+        android:textSize="11sp"
+        android:fontFamily="@font/jetbrains_mono_regular"
+        android:gravity="center"
+        android:alpha="0.55" />
+
+    <!-- Live -->
+    <TextView
+        android:id="@+id/tvCLive"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1.2"
+        android:text="—"
+        android:textColor="#334155"
+        android:textSize="11sp"
+        android:fontFamily="@font/jetbrains_mono_bold"
+        android:gravity="center" />
+
+    <!-- Status -->
+    <TextView
+        android:id="@+id/tvCStatus"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="—"
+        android:textColor="#334155"
+        android:textSize="10sp"
+        android:fontFamily="@font/rajdhani_semibold"
+        android:gravity="end"
+        android:paddingEnd="4dp" />
+
+</LinearLayout>

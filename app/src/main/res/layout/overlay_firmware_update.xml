@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    overlay_firmware_update.xml
+    Ditampilkan di MainActivity saat versi firmware ESP32
+    tidak cocok dengan yang diharapkan app.
+    Include di activity_main.xml sebagai FrameLayout child.
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/overlayFirmwareUpdate"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#F0050810"
+    android:visibility="gone">
+
+    <!-- Konten scrollable (atas) -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:overScrollMode="never"
+        android:scrollbars="none"
+        android:paddingTop="24dp"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:clipToPadding="false">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center_horizontal">
+
+            <!-- Icon -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚙️"
+                android:textSize="36sp"
+                android:layout_marginBottom="12dp" />
+
+            <!-- Judul -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="UPDATE FIRMWARE DIPERLUKAN"
+                android:textColor="#F59E0B"
+                android:textSize="16sp"
+                android:fontFamily="@font/rajdhani_bold"
+                android:letterSpacing="0.12"
+                android:gravity="center"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Info versi -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginBottom="16dp">
+
+                <TextView
+                    android:id="@+id/tvFwVersiDevice"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Device: -"
+                    android:textColor="#64748B"
+                    android:textSize="11sp"
+                    android:fontFamily="@font/jetbrains_mono_regular"
+                    android:layout_marginEnd="12dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="→"
+                    android:textColor="#334155"
+                    android:textSize="11sp"
+                    android:layout_marginEnd="12dp" />
+
+                <TextView
+                    android:id="@+id/tvFwVersiServer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Server: -"
+                    android:textColor="#F59E0B"
+                    android:textSize="11sp"
+                    android:fontFamily="@font/jetbrains_mono_regular" />
+            </LinearLayout>
+
+            <!-- Card cara update -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#0D1423"
+                android:padding="14dp"
+                android:orientation="vertical"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="CARA UPDATE"
+                    android:textColor="#334155"
+                    android:textSize="9sp"
+                    android:fontFamily="@font/rajdhani_semibold"
+                    android:letterSpacing="0.12"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="1. Hubungkan ESP32 via kabel OTG\n2. Tekan tombol UPDATE FIRMWARE\n3. Jangan cabut kabel selama proses\n4. ESP32 akan restart otomatis"
+                    android:textColor="#94A3B8"
+                    android:textSize="12sp"
+                    android:fontFamily="@font/rajdhani_regular"
+                    android:lineSpacingMultiplier="1.6" />
+            </LinearLayout>
+
+            <!-- Card changelog firmware -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#0D1423"
+                android:padding="14dp"
+                android:orientation="vertical"
+                android:layout_marginBottom="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="CHANGELOG FIRMWARE"
+                    android:textColor="#334155"
+                    android:textSize="9sp"
+                    android:fontFamily="@font/rajdhani_semibold"
+                    android:letterSpacing="0.12"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/tvFwChangelog"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="—"
+                    android:textColor="#94A3B8"
+                    android:textSize="12sp"
+                    android:fontFamily="@font/rajdhani_regular"
+                    android:lineSpacingMultiplier="1.5" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Tombol sticky di bawah — selalu terlihat -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#050810"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="16dp">
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#0D1423"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Tombol Update -->
+        <TextView
+            android:id="@+id/btnUpdateFirmware"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:gravity="center"
+            android:text="⚙  UPDATE FIRMWARE (OTG)"
+            android:textColor="#050810"
+            android:textSize="13sp"
+            android:fontFamily="@font/rajdhani_bold"
+            android:textAllCaps="true"
+            android:background="#F59E0B"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Info hint -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:text="Hubungkan OTG untuk melanjutkan update"
+            android:textColor="#334155"
+            android:textSize="10sp"
+            android:fontFamily="@font/rajdhani_regular"
+            android:gravity="center" />
+
+    </LinearLayout>
+
+</LinearLayout>

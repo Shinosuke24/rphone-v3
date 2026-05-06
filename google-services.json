@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "88775584379",
+    "project_id": "rphonev4-401fe",
+    "storage_bucket": "rphonev4-401fe.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:88775584379:android:fca55ce9181912f09b50de",
+        "android_client_info": {
+          "package_name": "com.rphone.v3"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCF9BeKv0swizxULtb-nNxqGb-kuTmAtzE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

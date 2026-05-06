@@ -1,0 +1,733 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background">
+
+    <!-- TOP BAR (36dp) -->
+    <LinearLayout
+        android:id="@+id/topBarSettings"
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:background="@color/surface"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <View
+            android:layout_width="6dp"
+            android:layout_height="6dp"
+            android:background="@drawable/bg_badge"
+            app:tint="@color/text_secondary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="R-PHONE V3"
+            android:textColor="@color/text_primary"
+            android:textSize="12sp"
+            android:fontFamily="@font/rajdhani_bold"
+            android:layout_marginStart="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_nav_active_psu"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="3dp"
+            android:text="SET"
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp"
+            android:fontFamily="@font/rajdhani_bold" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <View
+        android:id="@+id/topBarDividerSet"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/divider"
+        app:layout_constraintTop_toBottomOf="@id/topBarSettings" />
+
+    <!-- CONTENT -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:scrollbars="none"
+        app:layout_constraintTop_toBottomOf="@id/topBarDividerSet"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <!-- KOLOM KIRI -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:layout_marginEnd="4dp">
+
+                    <!-- Section BLUETOOTH -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_metric_card"
+                        android:padding="12dp"
+                        android:orientation="vertical"
+                        android:layout_marginBottom="8dp">
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="8dp">
+                            <View
+                                android:layout_width="3dp"
+                                android:layout_height="14dp"
+                                android:background="@color/info"
+                                android:layout_marginEnd="8dp" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="BLUETOOTH"
+                                android:textColor="@color/info"
+                                android:textSize="10sp"
+                                android:textAllCaps="true"
+                                android:letterSpacing="0.12"
+                                android:fontFamily="@font/rajdhani_semibold" />
+                        </LinearLayout>
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Nama perangkat"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="10sp"
+                            android:fontFamily="@font/rajdhani_regular" />
+                        <TextView
+                            android:id="@+id/tvNamaPerangkat"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="ESP32_PowerMonitor"
+                            android:textColor="@color/info"
+                            android:textSize="13sp"
+                            android:fontFamily="@font/rajdhani_bold"
+                            android:layout_marginBottom="10dp" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Status koneksi"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="10sp"
+                            android:fontFamily="@font/rajdhani_regular" />
+                        <TextView
+                            android:id="@+id/tvStatusKoneksi"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Terputus"
+                            android:textColor="@color/error"
+                            android:textSize="12sp"
+                            android:fontFamily="@font/rajdhani_bold"
+                            android:layout_marginBottom="10dp" />
+                        <TextView
+                            android:id="@+id/btnHubungkanBt"
+                            android:layout_width="match_parent"
+                            android:layout_height="38dp"
+                            android:background="@drawable/bg_nav_active_usb"
+                            android:gravity="center"
+                            android:text="HUBUNGKAN"
+                            android:textColor="@color/info"
+                            android:textSize="13sp"
+                            android:textAllCaps="true"
+                            android:fontFamily="@font/rajdhani_bold"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:foreground="?attr/selectableItemBackground" />
+                    </LinearLayout>
+
+                    <!-- Section MODE KONEKSI -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_metric_card"
+                        android:padding="12dp"
+                        android:orientation="vertical"
+                        android:layout_marginBottom="8dp">
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="8dp">
+                            <View
+                                android:layout_width="3dp"
+                                android:layout_height="14dp"
+                                android:background="@color/accent"
+                                android:layout_marginEnd="8dp" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="MODE KONEKSI"
+                                android:textColor="@color/accent"
+                                android:textSize="10sp"
+                                android:textAllCaps="true"
+                                android:letterSpacing="0.12"
+                                android:fontFamily="@font/rajdhani_semibold" />
+                        </LinearLayout>
+
+                        <RadioGroup
+                            android:id="@+id/rgConnectionMode"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+                            <RadioButton
+                                android:id="@+id/rbModeBt"
+                                android:layout_width="match_parent"
+                                android:layout_height="32dp"
+                                android:text="Bluetooth Only"
+                                android:textColor="@color/text_primary"
+                                android:textSize="12sp"
+                                android:buttonTint="@color/accent" />
+                            <RadioButton
+                                android:id="@+id/rbModeAuto"
+                                android:layout_width="match_parent"
+                                android:layout_height="32dp"
+                                android:text="Auto-Switch (Recommended)"
+                                android:textColor="@color/text_primary"
+                                android:textSize="12sp"
+                                android:buttonTint="@color/accent" />
+                            <RadioButton
+                                android:id="@+id/rbModeOtg"
+                                android:layout_width="match_parent"
+                                android:layout_height="32dp"
+                                android:text="USB OTG Only  ★ Direkomendasikan"
+                                android:textColor="@color/text_primary"
+                                android:textSize="12sp"
+                                android:buttonTint="@color/accent" />
+                        </RadioGroup>
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="Auto-Switch: OTG diutamakan, fallback ke BT otomatis."
+                            android:textColor="@color/text_tertiary"
+                            android:textSize="9sp"
+                            android:fontFamily="@font/rajdhani_regular" />
+                    </LinearLayout>
+
+                    <!-- Section PROFIL TEKNISI -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_metric_card"
+                        android:padding="12dp"
+                        android:orientation="vertical"
+                        android:layout_marginBottom="8dp">
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="8dp">
+                            <View
+                                android:layout_width="3dp"
+                                android:layout_height="14dp"
+                                android:background="@color/primary"
+                                android:layout_marginEnd="8dp" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="PROFIL TEKNISI"
+                                android:textColor="@color/primary"
+                                android:textSize="10sp"
+                                android:textAllCaps="true"
+                                android:letterSpacing="0.12"
+                                android:fontFamily="@font/rajdhani_semibold" />
+                        </LinearLayout>
+                        <EditText
+                            android:id="@+id/etNamaTeknisi"
+                            android:layout_width="match_parent"
+                            android:layout_height="36dp"
+                            android:background="@drawable/bg_chart_area"
+                            android:hint="Nama teknisi"
+                            android:textColorHint="@color/text_tertiary"
+                            android:textColor="@color/text_primary"
+                            android:textSize="12sp"
+                            android:fontFamily="@font/rajdhani_regular"
+                            android:paddingHorizontal="10dp"
+                            android:inputType="text"
+                            android:layout_marginBottom="8dp" />
+                        <TextView
+                            android:id="@+id/btnSimpanProfil"
+                            android:layout_width="match_parent"
+                            android:layout_height="32dp"
+                            android:background="@drawable/bg_chart_area"
+                            android:gravity="center"
+                            android:text="SIMPAN PROFIL"
+                            android:textColor="@color/primary"
+                            android:textSize="10sp"
+                            android:fontFamily="@font/rajdhani_bold"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:foreground="?attr/selectableItemBackground" />
+                    </LinearLayout>
+
+                    <!-- Section AMBANG DTW -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_metric_card"
+                        android:padding="12dp"
+                        android:orientation="vertical"
+                        android:layout_marginBottom="8dp">
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="8dp">
+                            <View
+                                android:layout_width="3dp"
+                                android:layout_height="14dp"
+                                android:background="@color/primary"
+                                android:layout_marginEnd="8dp" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="AMBANG DTW"
+                                android:textColor="@color/primary"
+                                android:textSize="10sp"
+                                android:textAllCaps="true"
+                                android:letterSpacing="0.12"
+                                android:fontFamily="@font/rajdhani_semibold" />
+                            <View
+                                android:layout_width="0dp"
+                                android:layout_height="1dp"
+                                android:layout_weight="1" />
+                            <TextView
+                                android:id="@+id/tvNilaiThreshold"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="70%"
+                                android:textColor="@color/primary"
+                                android:textSize="12sp"
+                                android:fontFamily="@font/rajdhani_bold" />
+                        </LinearLayout>
+                        <SeekBar
+                            android:id="@+id/seekBarThreshold"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:max="10"
+                            android:progress="10"
+                            android:progressTint="@color/primary"
+                            android:thumbTint="@color/primary" />
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Semakin tinggi persentase, pencocokan data semakin ketat."
+                            android:textColor="@color/text_tertiary"
+                            android:textSize="9sp"
+                            android:fontFamily="@font/rajdhani_regular" />
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <!-- KOLOM KANAN -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1.2"
+                    android:orientation="vertical"
+                    android:layout_marginStart="4dp">
+
+                    <!-- Section KALIBRASI SENSOR -->
+                    <FrameLayout
+                        android:id="@+id/layoutKalibrasi"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_metric_card"
+                        android:layout_marginBottom="8dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:padding="12dp"
+                            android:orientation="vertical">
+
+                            <LinearLayout
+                                android:id="@+id/headerKalibrasi"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical"
+                                android:layout_marginBottom="4dp"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:foreground="?attr/selectableItemBackground">
+                                <View
+                                    android:layout_width="3dp"
+                                    android:layout_height="14dp"
+                                    android:background="@color/warning"
+                                    android:layout_marginEnd="8dp" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="KALIBRASI SENSOR"
+                                    android:textColor="@color/warning"
+                                    android:textSize="10sp"
+                                    android:textAllCaps="true"
+                                    android:letterSpacing="0.12"
+                                    android:fontFamily="@font/rajdhani_semibold" />
+
+                                <View
+                                    android:layout_width="0dp"
+                                    android:layout_height="1dp"
+                                    android:layout_weight="1" />
+
+                                <ImageView
+                                    android:id="@+id/ivKalLock"
+                                    android:layout_width="14dp"
+                                    android:layout_height="14dp"
+                                    android:src="@android:drawable/ic_lock_idle_lock"
+                                    app:tint="@color/warning"
+                                    android:alpha="0.7" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:id="@+id/tvInfoKalibrasi"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Sesuaikan pengali jika pembacaan tidak akurat"
+                                android:textColor="@color/text_tertiary"
+                                android:textSize="9sp"
+                                android:fontFamily="@font/rajdhani_regular"
+                                android:layout_marginBottom="8dp" />
+
+                            <include
+                                android:id="@+id/sliderUsbVolt"
+                                layout="@layout/item_cal_slider" />
+                            <include
+                                android:id="@+id/sliderUsbCurr"
+                                layout="@layout/item_cal_slider" />
+                            <include
+                                android:id="@+id/sliderPsuVolt"
+                                layout="@layout/item_cal_slider" />
+                            <include
+                                android:id="@+id/sliderPsuCurr"
+                                layout="@layout/item_cal_slider" />
+                            <include
+                                android:id="@+id/sliderDpdm"
+                                layout="@layout/item_cal_slider" />
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:layout_marginTop="8dp">
+                                <TextView
+                                    android:id="@+id/btnBacaKal"
+                                    android:layout_width="0dp"
+                                    android:layout_height="32dp"
+                                    android:layout_weight="1"
+                                    android:layout_marginEnd="4dp"
+                                    android:background="@drawable/bg_chart_area"
+                                    android:gravity="center"
+                                    android:text="BACA"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="10sp"
+                                    android:fontFamily="@font/rajdhani_bold"
+                                    android:clickable="true"
+                                    android:focusable="true"
+                                    android:foreground="?attr/selectableItemBackground" />
+                                <TextView
+                                    android:id="@+id/btnKirimKal"
+                                    android:layout_width="0dp"
+                                    android:layout_height="32dp"
+                                    android:layout_weight="1.2"
+                                    android:layout_marginEnd="4dp"
+                                    android:background="@drawable/bg_nav_active_usb"
+                                    android:gravity="center"
+                                    android:text="KIRIM KE ESP"
+                                    android:textColor="@color/info"
+                                    android:textSize="10sp"
+                                    android:fontFamily="@font/rajdhani_bold"
+                                    android:clickable="true"
+                                    android:focusable="true"
+                                    android:foreground="?attr/selectableItemBackground" />
+                                <TextView
+                                    android:id="@+id/btnResetKal"
+                                    android:layout_width="0dp"
+                                    android:layout_height="32dp"
+                                    android:layout_weight="1"
+                                    android:background="@drawable/bg_chart_area"
+                                    android:gravity="center"
+                                    android:text="RESET"
+                                    android:textColor="@color/error"
+                                    android:textSize="10sp"
+                                    android:fontFamily="@font/rajdhani_bold"
+                                    android:clickable="true"
+                                    android:focusable="true"
+                                    android:foreground="?attr/selectableItemBackground" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <FrameLayout
+                            android:id="@+id/overlayKalLock"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="#99000D14"
+                            android:visibility="visible"
+                            android:layout_marginTop="38dp">
+                        </FrameLayout>
+
+                    </FrameLayout>
+
+                    <!-- Section AI PROVIDER -->
+                    <LinearLayout
+                        android:id="@+id/sectionAiProvider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_metric_card"
+                        android:padding="12dp"
+                        android:orientation="vertical"
+                        android:layout_marginTop="8dp">
+
+                        <!-- Header section -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="10dp">
+                            <View
+                                android:layout_width="3dp"
+                                android:layout_height="14dp"
+                                android:background="#A78BFA"
+                                android:layout_marginEnd="8dp" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="AI PROVIDER"
+                                android:textColor="#A78BFA"
+                                android:textSize="10sp"
+                                android:textAllCaps="true"
+                                android:letterSpacing="0.12"
+                                android:fontFamily="@font/rajdhani_semibold" />
+                        </LinearLayout>
+
+                        <!-- RadioGroup pilihan provider -->
+                        <RadioGroup
+                            android:id="@+id/rgAiProvider"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginBottom="10dp">
+
+                            <RadioButton
+                                android:id="@+id/rbProviderLitellm"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="LiteLLM"
+                                android:textColor="@color/text_primary"
+                                android:textSize="11sp"
+                                android:fontFamily="@font/rajdhani_semibold"
+                                android:buttonTint="#A78BFA"
+                                android:checked="true" />
+
+                            <RadioButton
+                                android:id="@+id/rbProviderClaude"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Claude"
+                                android:textColor="@color/text_primary"
+                                android:textSize="11sp"
+                                android:fontFamily="@font/rajdhani_semibold"
+                                android:buttonTint="#A78BFA" />
+
+                            <RadioButton
+                                android:id="@+id/rbProviderGroq"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Groq"
+                                android:textColor="@color/text_primary"
+                                android:textSize="11sp"
+                                android:fontFamily="@font/rajdhani_semibold"
+                                android:buttonTint="#A78BFA" />
+
+                            <RadioButton
+                                android:id="@+id/rbProviderGemini"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Gemini"
+                                android:textColor="@color/text_primary"
+                                android:textSize="11sp"
+                                android:fontFamily="@font/rajdhani_semibold"
+                                android:buttonTint="#A78BFA" />
+                        </RadioGroup>
+
+                        <!-- Label info provider -->
+                        <TextView
+                            android:id="@+id/tvAiProviderInfo"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Proxy OpenAI-compatible. Base URL: api.koboillm.com/v1"
+                            android:textColor="@color/text_tertiary"
+                            android:textSize="9sp"
+                            android:fontFamily="@font/rajdhani_regular"
+                            android:layout_marginBottom="8dp" />
+
+                        <!-- Input API Key -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="API Key"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="10sp"
+                            android:fontFamily="@font/rajdhani_regular"
+                            android:layout_marginBottom="4dp" />
+
+                        <EditText
+                            android:id="@+id/etAiApiKey"
+                            android:layout_width="match_parent"
+                            android:layout_height="38dp"
+                            android:background="@drawable/bg_chart_area"
+                            android:paddingHorizontal="10dp"
+                            android:textColor="@color/text_primary"
+                            android:textSize="11sp"
+                            android:fontFamily="@font/rajdhani_regular"
+                            android:inputType="textPassword"
+                            android:hint="Masukkan API key..."
+                            android:textColorHint="@color/text_tertiary"
+                            android:layout_marginBottom="8dp" />
+
+                        <!-- LiteLLM Extra Fields -->
+                        <LinearLayout
+                            android:id="@+id/layoutLitellmExtra"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone"
+                            android:layout_marginTop="4dp">
+
+                            <EditText
+                                android:id="@+id/etLitellmBaseUrl"
+                                android:layout_width="match_parent"
+                                android:layout_height="36dp"
+                                android:background="@drawable/bg_chart_area"
+                                android:hint="Base URL (contoh: https://api.koboillm.com/v1)"
+                                android:textColorHint="@color/text_tertiary"
+                                android:textColor="@color/text_primary"
+                                android:textSize="10sp"
+                                android:fontFamily="@font/rajdhani_regular"
+                                android:paddingHorizontal="10dp"
+                                android:inputType="textUri"
+                                android:layout_marginBottom="8dp" />
+
+                            <TextView
+                                android:id="@+id/btnFetchModels"
+                                android:layout_width="match_parent"
+                                android:layout_height="32dp"
+                                android:background="@drawable/bg_chart_area"
+                                android:gravity="center"
+                                android:text="FETCH MODELS"
+                                android:textColor="@color/accent"
+                                android:textSize="10sp"
+                                android:fontFamily="@font/rajdhani_bold"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:foreground="?attr/selectableItemBackground"
+                                android:layout_marginBottom="8dp" />
+
+                            <androidx.recyclerview.widget.RecyclerView
+                                android:id="@+id/rvModelList"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:maxHeight="160dp"
+                                android:nestedScrollingEnabled="false"
+                                android:layout_marginBottom="8dp" />
+
+                        </LinearLayout>
+
+                        <!-- Tombol Simpan -->
+                        <TextView
+                            android:id="@+id/btnSimpanAiKey"
+                            android:layout_width="match_parent"
+                            android:layout_height="34dp"
+                            android:background="@drawable/bg_nav_active_waveid"
+                            android:gravity="center"
+                            android:text="SIMPAN KONFIGURASI AI"
+                            android:textColor="#10B981"
+                            android:textSize="11sp"
+                            android:fontFamily="@font/rajdhani_bold"
+                            android:textAllCaps="true"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:foreground="?attr/selectableItemBackground" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- ═══════════ DEVELOPER MODE ═══════════ -->
+            <LinearLayout
+                android:id="@+id/sectionDevMode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="12dp">
+
+                <!-- Header — tap untuk unlock -->
+                <TextView
+                    android:id="@+id/tvDevModeHeader"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="⚙ DEVELOPER MODE"
+                    android:textColor="#334155"
+                    android:textSize="9sp"
+                    android:fontFamily="@font/rajdhani_semibold"
+                    android:letterSpacing="0.1"
+                    android:paddingBottom="6dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground" />
+
+                <!-- Konten dev mode — hidden sampai unlock -->
+                <LinearLayout
+                    android:id="@+id/layoutDevContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                </LinearLayout>
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

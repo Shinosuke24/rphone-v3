@@ -1,0 +1,418 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_main">
+
+<androidx.constraintlayout.widget.ConstraintLayout
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_main">
+
+    <!-- Side Navigation -->
+    <LinearLayout
+        android:id="@+id/sideNav"
+        android:layout_width="60dp"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="#080C14"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <!-- App indicator dot -->
+        <View
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+                    android:layout_marginTop="10dp"
+            android:background="@drawable/bg_status_dot" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="8dp"
+            android:background="#0D1423" />
+
+        <!-- USB Mode Nav Button -->
+        <FrameLayout
+            android:id="@+id/navUsb"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:clickable="true"
+            android:focusable="true">
+
+            <View
+                android:id="@+id/indicatorUsb"
+                android:layout_width="3dp"
+                android:layout_height="24dp"
+                android:layout_gravity="start|center_vertical"
+                android:background="#00D4FF"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <ImageView
+                    android:id="@+id/iconUsb"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@drawable/ic_usb"
+                    app:tint="#334155" />
+
+                <TextView
+                    android:id="@+id/labelUsb"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="USB"
+                    android:textColor="#334155"
+                    android:textSize="7sp"
+                    android:textAllCaps="true"
+                    android:letterSpacing="0.05"
+                    android:fontFamily="@font/rajdhani_semibold" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- PSU Mode Nav Button -->
+        <FrameLayout
+            android:id="@+id/navPsu"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:clickable="true"
+            android:focusable="true">
+
+            <View
+                android:id="@+id/indicatorPsu"
+                android:layout_width="3dp"
+                android:layout_height="24dp"
+                android:layout_gravity="start|center_vertical"
+                android:background="#7C3AED"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <ImageView
+                    android:id="@+id/iconPsu"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@drawable/ic_psu"
+                    app:tint="#334155" />
+
+                <TextView
+                    android:id="@+id/labelPsu"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="PSU"
+                    android:textColor="#334155"
+                    android:textSize="7sp"
+                    android:textAllCaps="true"
+                    android:letterSpacing="0.05"
+                    android:fontFamily="@font/rajdhani_semibold" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- PROBE Mode Nav Button -->
+        <FrameLayout
+            android:id="@+id/navProbe"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:clickable="true"
+            android:focusable="true">
+
+            <View
+                android:id="@+id/indicatorProbe"
+                android:layout_width="3dp"
+                android:layout_height="24dp"
+                android:layout_gravity="start|center_vertical"
+                android:background="#F59E0B"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <ImageView
+                    android:id="@+id/iconProbe"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@drawable/ic_probe"
+                    app:tint="#334155" />
+
+                <TextView
+                    android:id="@+id/labelProbe"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="PROBE"
+                    android:textColor="#334155"
+                    android:textSize="7sp"
+                    android:textAllCaps="true"
+                    android:letterSpacing="0.05"
+                    android:fontFamily="@font/rajdhani_semibold" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- WaveID Nav Button -->
+        <FrameLayout
+            android:id="@+id/navWaveid"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:clickable="true"
+            android:focusable="true">
+
+            <View
+                android:id="@+id/indicatorWaveid"
+                android:layout_width="3dp"
+                android:layout_height="24dp"
+                android:layout_gravity="start|center_vertical"
+                android:background="#10B981"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <ImageView
+                    android:id="@+id/iconWaveid"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@drawable/ic_waveid"
+                    app:tint="#334155" />
+
+                <TextView
+                    android:id="@+id/labelWaveid"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="WAVE"
+                    android:textColor="#334155"
+                    android:textSize="7sp"
+                    android:textAllCaps="true"
+                    android:letterSpacing="0.05"
+                    android:fontFamily="@font/rajdhani_semibold" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- UART Reader Nav Button -->
+        <FrameLayout
+            android:id="@+id/navUart"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:clickable="true"
+            android:focusable="true">
+
+            <View
+                android:id="@+id/indicatorUart"
+                android:layout_width="3dp"
+                android:layout_height="24dp"
+                android:layout_gravity="start|center_vertical"
+                android:background="#14B8A6"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <ImageView
+                    android:id="@+id/iconUart"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@drawable/ic_uart"
+                    app:tint="#334155" />
+
+                <TextView
+                    android:id="@+id/labelUart"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="UART"
+                    android:textColor="#334155"
+                    android:textSize="7sp"
+                    android:textAllCaps="true"
+                    android:letterSpacing="0.05"
+                    android:fontFamily="@font/rajdhani_semibold" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- Spacer -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Settings Nav Button -->
+        <FrameLayout
+            android:id="@+id/navSettings"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:clickable="true"
+            android:focusable="true">
+
+            <View
+                android:id="@+id/indicatorSettings"
+                android:layout_width="3dp"
+                android:layout_height="24dp"
+                android:layout_gravity="start|center_vertical"
+                android:background="#94A3B8"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <ImageView
+                    android:id="@+id/iconSettings"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@drawable/ic_settings"
+                    app:tint="#334155" />
+
+                <TextView
+                    android:id="@+id/labelSettings"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="SET"
+                    android:textColor="#334155"
+                    android:textSize="7sp"
+                    android:textAllCaps="true"
+                    android:letterSpacing="0.05"
+                    android:fontFamily="@font/rajdhani_semibold" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#0D1423"
+            android:layout_marginTop="4dp" />
+
+        <!-- BT Status Button -->
+        <LinearLayout
+            android:id="@+id/btnBtConnect"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="6dp"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_card"
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:id="@+id/iconBtStatus"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/ic_bluetooth"
+                android:contentDescription="Bluetooth" />
+
+            <TextView
+                android:id="@+id/tvBtLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:text="BT"
+                android:textColor="#334155"
+                android:textSize="7sp"
+                android:fontFamily="@font/rajdhani_bold"
+                android:textAllCaps="true"
+                android:gravity="center" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Right Border -->
+    <View
+        android:layout_width="1dp"
+        android:layout_height="match_parent"
+        android:background="#0FFFFFFF"
+        app:layout_constraintStart_toEndOf="@id/sideNav" />
+
+    <!-- Main Content (NavHostFragment) -->
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/navHostFragment"
+        android:name="androidx.navigation.fragment.NavHostFragment"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        app:defaultNavHost="true"
+        app:navGraph="@navigation/nav_graph"
+        app:layout_constraintStart_toEndOf="@id/sideNav"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
+
+    <!-- Running Text Info (Supabase) - di kanan, tidak nutupin label kiri -->
+    <TextView
+        android:id="@+id/tvNamaKonter"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textSize="13sp"
+        android:textColor="#94A3B8"
+        android:letterSpacing="0.1"
+        android:textAllCaps="true"
+        android:fontFamily="@font/rajdhani_bold"
+        android:background="@android:color/transparent"
+        android:visibility="gone"
+        android:singleLine="true"
+        android:ellipsize="marquee"
+        android:marqueeRepeatLimit="marquee_forever"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        app:layout_constraintStart_toEndOf="@id/sideNav"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        android:layout_marginStart="220dp"
+        android:layout_marginTop="6dp"
+        android:layout_marginEnd="56dp" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Overlay Firmware Update — dari FirmwareChecker -->
+    <include layout="@layout/overlay_firmware_update"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Overlay Firmware Flashing — progress flash -->
+    <include layout="@layout/overlay_firmware_flashing"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+</FrameLayout>
