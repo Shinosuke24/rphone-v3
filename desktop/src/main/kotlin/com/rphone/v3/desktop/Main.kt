@@ -420,6 +420,8 @@ class RPhoneDesktopApp : Application() {
         })
     }
 
+    private var probeCurrentFilter = "ALL"
+
     private fun buildProbePage(): Node {
         probeValue = label("0.000", amber, 44.0, true).apply {
             font = Font.font("Consolas", 44.0)
@@ -478,8 +480,8 @@ class RPhoneDesktopApp : Application() {
             children.addAll(
                 actionButtonsRow(
                     secondaryActionButton("COMPARE", purple) { selectPage(DesktopPage.WAVEID) },
-                    secondaryActionButton("PASIF", cyan) { notification.showMessage("Filter PASIF") },
-                    secondaryActionButton("AKTIF", green) { notification.showMessage("Filter AKTIF") }
+                    secondaryActionButton("PASIF", cyan) { filterProbeHistory("PASIF") },
+                    secondaryActionButton("AKTIF", green) { filterProbeHistory("AKTIF") }
                 ),
                 probeHistoryList
             )
@@ -527,7 +529,7 @@ class RPhoneDesktopApp : Application() {
             hgap = 10.0
             vgap = 10.0
             add(waveTile("🗂", "Rekam Baru", "Rekam arus boot HP") { recordWaveProfile() }, 0, 0)
-            add(waveTile("📁", "Database", "149 profil") { loadWaveFiles() }, 1, 0)
+            add(waveTile("📁", "Database", "Lihat profil tersimpan") { loadWaveFiles() }, 1, 0)
             add(waveTile("◫", "Bandingkan", "Overlay 2 waveform") { notification.showMessage("Bandingkan dipetakan ke shell EXE") }, 0, 1)
             add(waveTile("📥", "Import .rphp", "Tambah dari komunitas") { importWaveLog() }, 1, 1)
         }
@@ -1016,24 +1018,49 @@ class RPhoneDesktopApp : Application() {
 
     private fun saveProbeSnapshot() {
         scope.launch {
-            val filename = "probe-${LocalTime.now().format(DateTimeFormatter.ofPattern("HHmmss"))}.txt"
+            val modePrefix = probeModeLabel.text.take(3).uppercase()
+            val filename = "probe-${modePrefix}-${LocalTime.now().format(DateTimeFormatter.ofPattern("HHmmss"))}.txt"
             val payload = buildString {
                 appendLine("R-Phone V3 Probe Snapshot")
                 appendLine("Time: ${LocalTime.now()}")
                 appendLine("Value: ${probeValue.text}")
                 appendLine("Mode: ${probeModeLabel.text}")
+                appendLine("Type: ${if (isProbeTypePasif(probeModeLabel.text)) "PASIF" else "AKTIF"}")
                 appendLine()
                 append(receiveBuffer.toString())
             }
             val ok = storage.save(filename, payload)
             withContext(Dispatchers.Main) {
                 if (ok) {
-                    probeHistoryList.items.add(0, filename)
                     lastSavedRecord = filename
                     notification.showSuccess("Probe snapshot tersimpan: $filename")
+                    refreshProbeHistory()
                 } else {
                     notification.showError("Gagal menyimpan snapshot probe")
                 }
+            }
+        }
+    }
+
+    private fun isProbeTypePasif(mode: String): Boolean {
+        return mode.equals("OHM", ignoreCase = true) || mode.equals("DIODA", ignoreCase = true)
+    }
+
+    private fun filterProbeHistory(filterType: String) {
+        probeCurrentFilter = filterType
+        refreshProbeHistory()
+    }
+
+    private fun refreshProbeHistory() {
+        scope.launch {
+            val allFiles = storage.listFiles().filter { it.startsWith("probe-") && it.endsWith(".txt") }
+            val filtered = when (probeCurrentFilter) {
+                "PASIF" -> allFiles.filter { it.contains("-OHM-") || it.contains("-DIO-") }
+                "AKTIF" -> allFiles.filter { it.contains("-VOL-") }
+                else -> allFiles
+            }
+            withContext(Dispatchers.Main) {
+                probeHistoryList.items.setAll(filtered.sortedDescending())
             }
         }
     }
@@ -1133,11 +1160,11 @@ class RPhoneDesktopApp : Application() {
             val files = storage.listFiles()
             withContext(Dispatchers.Main) {
                 uartFileList.items.setAll(files)
-                probeHistoryList.items.setAll(files.filter { it.contains("probe", true) })
                 waveHistoryList.items.setAll(files)
                 waveDbCountLabel.text = files.count { it.endsWith(".rphp", true) }.toString()
             }
         }
+        refreshProbeHistory()
     }
 
     private fun recordWaveProfile() {
