@@ -32,7 +32,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
           Write-Host "Creating bundled Java 21 runtime for Windows..."
           & "$env:JAVA_HOME\bin\jlink.exe" `
-            --add-modules java.base,java.desktop,java.logging,java.management,java.naming,java.sql,java.xml,java.base,java.nio `
+            --add-modules java.base,java.desktop,java.logging,java.management,java.sql `
             --strip-debug `
             --no-header-files `
             --no-man-pages `
