@@ -14,6 +14,7 @@ import javafx.beans.value.ChangeListener
 import javafx.collections.FXCollections
 import javafx.geometry.Insets
 import javafx.geometry.Pos
+import javafx.scene.control.OverrunStyle
 import javafx.scene.Node
 import javafx.scene.Scene
 import javafx.scene.canvas.Canvas
@@ -37,6 +38,7 @@ import javafx.scene.layout.HBox
 import javafx.scene.layout.Priority
 import javafx.scene.layout.Region
 import javafx.scene.layout.StackPane
+import javafx.scene.layout.ColumnConstraints
 import javafx.scene.layout.VBox
 import javafx.scene.paint.Color
 import javafx.scene.text.Font
@@ -167,12 +169,12 @@ class RPhoneDesktopApp : Application() {
     }
 
     private fun buildSidebar(): VBox {
-        val header = VBox(4.0).apply {
-            padding = Insets(10.0, 10.0, 12.0, 10.0)
+        val header = VBox(2.0).apply {
+            padding = Insets(8.0, 8.0, 10.0, 8.0)
             children.addAll(
-                smallStatusDot(green),
-                label("R-PHONE V3", textPrimary, 13.0, true),
-                pill("PORTED EXE SHELL", purple)
+                // larger logo/title and a small sublabel beneath
+                label("R-PHONE V3", textPrimary, 18.0, true),
+                label("PORTED EXE SHELL", purple, 10.0, false)
             )
         }
 
@@ -294,6 +296,9 @@ class RPhoneDesktopApp : Application() {
         val metrics = GridPane().apply {
             hgap = 8.0
             vgap = 8.0
+            // prefer slightly wider first column so numeric values have room
+            columnConstraints.add(ColumnConstraints().apply { percentWidth = 60.0; hgrow = Priority.ALWAYS })
+            columnConstraints.add(ColumnConstraints().apply { percentWidth = 40.0; hgrow = Priority.ALWAYS })
             add(metricCard("ARUS", usbMetricCurrent, "A"), 0, 0)
             add(metricCard("TEGANGAN", usbMetricVoltage, "V"), 1, 0)
             add(metricCard("DAYA", usbMetricPower, "W"), 0, 1)
@@ -671,6 +676,8 @@ class RPhoneDesktopApp : Application() {
         val grid = GridPane().apply {
             hgap = 8.0
             vgap = 8.0
+            columnConstraints.add(ColumnConstraints().apply { percentWidth = 60.0; hgrow = Priority.ALWAYS })
+            columnConstraints.add(ColumnConstraints().apply { percentWidth = 40.0; hgrow = Priority.ALWAYS })
         }
         items.forEachIndexed { index, item ->
             grid.add(metricCard(item.first, item.second, item.third), index % 2, index / 2)
@@ -679,9 +686,12 @@ class RPhoneDesktopApp : Application() {
     }
 
     private fun metricCard(title: String, valueLabel: Label, unit: String): VBox {
-        return card(title, HBox(4.0).apply {
-            alignment = Pos.BASELINE_LEFT
-            children.addAll(valueLabel, label(unit, muted, 12.0, false))
+        return card(title, VBox(2.0).apply {
+            alignment = Pos.CENTER_LEFT
+            children.addAll(
+                valueLabel,
+                label(unit, muted, 11.0, false)
+            )
         }).apply {
             minHeight = 96.0
             maxWidth = Double.MAX_VALUE
@@ -750,9 +760,11 @@ class RPhoneDesktopApp : Application() {
         }
         canvas.widthProperty().bind(wrapper.widthProperty())
         canvas.heightProperty().bind(wrapper.heightProperty())
-        // Prevent canvas click from causing unexpected layout/focus changes
+        // Prevent canvas or wrapper click from causing unexpected layout/focus changes
         canvas.isFocusTraversable = false
+        wrapper.isFocusTraversable = false
         canvas.addEventHandler(MouseEvent.MOUSE_CLICKED) { it.consume() }
+        wrapper.addEventHandler(MouseEvent.MOUSE_CLICKED) { it.consume() }
         Platform.runLater {
             val accent = if (canvas == psuChartCanvas) purple else cyan
             drawWaveform(canvas.graphicsContext2D, canvas.width, canvas.height, accent)
@@ -946,6 +958,11 @@ class RPhoneDesktopApp : Application() {
                 if (text.isNotEmpty()) {
                     withContext(Dispatchers.Main) {
                         appendConsole("RX", text)
+                        // If the message is just dots or looks suspiciously non-numeric, also log raw hex for debugging
+                        if (Regex("^\\.+$").matches(text) || text.length <= 3 && text.all { it == '.' }) {
+                            val hex = bytes.joinToString(" ") { String.format("%02X", it) }
+                            appendConsole("RX-HEX", hex)
+                        }
                         ingestSerialText(text)
                     }
                 }
@@ -1420,7 +1437,7 @@ class RPhoneDesktopApp : Application() {
                 -fx-border-width: 1;
                 -fx-font-size: 12px;
                 -fx-font-weight: bold;
-                -fx-padding: 10 12 10 12;
+                -fx-padding: 6 8 6 8;
                 -fx-background-radius: 14;
                 -fx-border-radius: 14;
             """.trimIndent()
@@ -1431,7 +1448,7 @@ class RPhoneDesktopApp : Application() {
                 -fx-border-color: transparent;
                 -fx-font-size: 12px;
                 -fx-font-weight: bold;
-                -fx-padding: 10 12 10 12;
+                -fx-padding: 6 8 6 8;
                 -fx-background-radius: 14;
                 -fx-border-radius: 14;
             """.trimIndent()
@@ -1497,6 +1514,10 @@ class RPhoneDesktopApp : Application() {
     private fun metricValue(text: String, color: Color): Label {
         return label(text, color, 28.0, true).apply {
             style += "-fx-font-family: 'Consolas';"
+            // allow the numeric label to expand and avoid ellipsis
+            maxWidth = Double.MAX_VALUE
+            isWrapText = false
+            setTextOverrun(OverrunStyle.CLIP)
         }
     }
 
