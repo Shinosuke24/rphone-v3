@@ -31,6 +31,8 @@ import javafx.scene.control.TextField
 import javafx.scene.control.ToggleButton
 import javafx.scene.control.ToolBar
 import javafx.scene.control.CheckBox
+import javafx.scene.image.Image
+import javafx.scene.image.ImageView
 import javafx.scene.layout.BorderPane
 import javafx.scene.layout.FlowPane
 import javafx.scene.layout.GridPane
@@ -179,12 +181,34 @@ class RPhoneDesktopApp : Application() {
     }
 
     private fun buildSidebar(): VBox {
+        val logoImage = javaClass.getResourceAsStream("/com/rphone/v3/desktop/waveid_logo.png")?.use { Image(it) }
+        val logoNode = if (logoImage != null) {
+            ImageView(logoImage).apply {
+                fitWidth = 72.0
+                fitHeight = 72.0
+                isPreserveRatio = true
+                isSmooth = true
+            }
+        } else {
+            label("W", cyan, 28.0, true)
+        }
+
         val header = VBox(2.0).apply {
             padding = Insets(8.0, 8.0, 10.0, 8.0)
             children.addAll(
-                // larger logo/title and a small sublabel beneath
-                label("R-PHONE V3", textPrimary, 18.0, true),
-                label("PORTED EXE SHELL", purple, 10.0, false)
+                HBox(10.0).apply {
+                    alignment = Pos.CENTER_LEFT
+                    children.addAll(
+                        logoNode,
+                        VBox(0.0).apply {
+                            children.addAll(
+                                label("WAVEID", textPrimary, 18.0, true),
+                                label("PHONE REPAIR", cyan, 10.0, false),
+                                label("AI POWERED SHELL", purple, 10.0, false)
+                            )
+                        }
+                    )
+                }
             )
         }
 
@@ -322,7 +346,7 @@ class RPhoneDesktopApp : Application() {
         }
 
         val tabs = tabBar(cyan, listOf("ARUS", "VOLT", "DAYA", "ALL"))
-        val chartCard = card("Measurement Results", VBox(8.0).apply {
+        val chartCard = card("WAVEFORM", VBox(8.0).apply {
             children.addAll(tabs, chartPanel(usbChartCanvas), chartFooter(cyan))
         }).apply {
             prefWidth = 720.0
@@ -429,10 +453,11 @@ class RPhoneDesktopApp : Application() {
             )
         }
 
-        val rightColumn = card("Measurement Results", VBox(8.0).apply {
+        val rightColumn = card("WAVEFORM", VBox(8.0).apply {
             children.addAll(
                 tabBar(purple, listOf("ARUS", "VOLT", "DAYA", "ALL")),
                 chartPanel(psuChartCanvas),
+                label("Live waveform from PSU analysis", textSecondary, 10.0, false),
                 chartFooter(purple)
             )
         }).apply {
