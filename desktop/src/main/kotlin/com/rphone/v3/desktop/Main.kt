@@ -117,6 +117,7 @@ class RPhoneDesktopApp : Application() {
     private lateinit var probeOhmLabel: Label
     private lateinit var settingsStatus: Label
     private lateinit var clockLabel: Label
+    private lateinit var settingsUsernameField: TextField
     private lateinit var usbChartCanvas: Canvas
     private lateinit var psuChartCanvas: Canvas
     private lateinit var pageTitle: Label
@@ -138,6 +139,17 @@ class RPhoneDesktopApp : Application() {
     private var probeActiveMode = "VOLT"
     private var probeSettlingUntilMs = 0L
     private var probePollingJob: Job? = null
+    private var probeHasStartedMeasuring = false
+    private var probeStableDisplay = ""
+    private var probeStableStartMs = 0L
+    private val probeStableDurationMs = 500L
+    private val probeMedianSize = 3
+    private val probeVoltBuffer = ArrayDeque<Double>(5)
+    private val probeDiodeBuffer = ArrayDeque<Double>(5)
+    private val probeOhmBuffer = ArrayDeque<Double>(5)
+    private var probeLastStableOhm = 0.0
+    private val probeHistoryPasif = mutableListOf<ProbeHistoryEntry>()
+    private val probeHistoryAktif = mutableListOf<ProbeHistoryEntry>()
     private var psuPwmEnabled = false
     private var psuPwmDurationMs = 2000
     private var psuOcpStatus = "OFF"
@@ -159,6 +171,39 @@ class RPhoneDesktopApp : Application() {
     private val purple = Color.web("#A78BFA")
     private val red = Color.web("#EF4444")
     private val amber = Color.web("#F59E0B")
+
+    private enum class ProbeModeState {
+        VOLT,
+        DIODE,
+        OHM
+    }
+
+    private data class ProbeReading(
+        val mode: ProbeModeState,
+        val display: String,
+        val valueOnly: String,
+        val volt: Double = 0.0,
+        val vdrop: Double = 0.0,
+        val ohm: Double = 0.0,
+        val isOpen: Boolean = false,
+        val isShort: Boolean = false
+    )
+
+    private data class ProbeHistoryEntry(
+        val timestampMs: Long,
+        val mode: ProbeModeState,
+        val display: String,
+        val label: String = ""
+    ) {
+        fun asLine(): String {
+            val t = java.time.Instant.ofEpochMilli(timestampMs)
+                .atZone(java.time.ZoneId.systemDefault())
+                .toLocalTime()
+                .format(DateTimeFormatter.ofPattern("HH:mm:ss"))
+            val kaki = if (label.isBlank()) "" else " | $label"
+            return "$t | ${mode.name} | $display$kaki"
+        }
+    }
 
     private data class DesktopWaveformState(
         var activeChannel: WaveChannel = WaveChannel.CURRENT,
@@ -782,6 +827,7 @@ class RPhoneDesktopApp : Application() {
         val aiCombo = ComboBox<String>(aiProviders).apply { value = "liteLLM" }
         val aiApiKey = TextField().apply { promptText = "API Key"; style = controlStyle() }
         val aiBaseUrl = TextField().apply { promptText = "Base URL (liteLLM)"; style = controlStyle() }
+        settingsUsernameField = TextField().apply { promptText = "Nama teknisi (username)"; style = controlStyle() }
 
         fun saveAiConfig() {
             scope.launch {
@@ -804,6 +850,21 @@ class RPhoneDesktopApp : Application() {
             }
         }
 
+        fun saveUserConfig() {
+            scope.launch {
+                val ujson = buildString {
+                    appendLine("{")
+                    appendLine("  \"username\": \"${escapeJson(settingsUsernameField.text)}\",")
+                    appendLine("  \"connectionMode\": \"${modeCombo.value}\"")
+                    appendLine("}")
+                }
+                val ok = storage.save("user_settings.json", ujson)
+                withContext(Dispatchers.Main) {
+                    if (ok) notification.showSuccess("User setting tersimpan") else notification.showError("Gagal simpan user setting")
+                }
+            }
+        }
+
         // load existing
         scope.launch {
             val loaded = storage.load("ai_settings.json")
@@ -822,6 +883,16 @@ class RPhoneDesktopApp : Application() {
                     if (p != null) aiCombo.value = p
                     if (k != null) aiApiKey.text = k
                     if (u != null) aiBaseUrl.text = u
+                }
+            }
+            // load username
+            val userLoaded = storage.load("user_settings.json").orEmpty()
+            if (userLoaded.isNotBlank()) {
+                val uname = Regex("\"username\"\\s*:\\s*\"([^\"]+)\"").find(userLoaded)?.groups?.get(1)?.value
+                val mode = Regex("\"connectionMode\"\\s*:\\s*\"([^\"]+)\"").find(userLoaded)?.groups?.get(1)?.value
+                withContext(Dispatchers.Main) {
+                    if (uname != null) settingsUsernameField.text = uname
+                    if (mode != null && mode in listOf("auto", "bt", "otg")) modeCombo.value = mode
                 }
             }
         }
@@ -849,9 +920,12 @@ class RPhoneDesktopApp : Application() {
                         aiApiKey,
                         label("Base URL", textSecondary, 11.0, true),
                         aiBaseUrl,
+                        label("Username", textSecondary, 11.0, true),
+                        settingsUsernameField,
                         actionButtonsRow(
                             secondaryActionButton("Fetch Models", purple) { notification.showMessage("Fetching models (stub)...") },
-                            primaryActionButton("SIMPAN KONFIGURASI AI", green) { saveAiConfig() }
+                            primaryActionButton("SIMPAN KONFIGURASI AI", green) { saveAiConfig() },
+                            secondaryActionButton("SIMPAN USER", green) { saveUserConfig() }
                         )
                     )
                 }),
@@ -1244,6 +1318,7 @@ class RPhoneDesktopApp : Application() {
     private fun switchProbeMode(mode: String) {
         probeActiveMode = mode.uppercase()
         probeSettlingUntilMs = System.currentTimeMillis() + probeCooldownMs(probeActiveMode)
+        resetProbeStabilityState()
         probeModeLabel.text = when (probeActiveMode) {
             "DIODE" -> "DIODA"
             "OHM" -> "OHM"
@@ -1296,6 +1371,146 @@ class RPhoneDesktopApp : Application() {
     private fun stopProbePolling() {
         probePollingJob?.cancel()
         probePollingJob = null
+    }
+
+    private fun resetProbeStabilityState() {
+        probeStableDisplay = ""
+        probeStableStartMs = 0L
+        probeHasStartedMeasuring = false
+        probeVoltBuffer.clear()
+        probeDiodeBuffer.clear()
+        probeOhmBuffer.clear()
+        probeLastStableOhm = 0.0
+    }
+
+    private fun addToProbeBuffer(buffer: ArrayDeque<Double>, value: Double) {
+        if (buffer.size >= probeMedianSize) {
+            buffer.removeFirst()
+        }
+        buffer.addLast(value)
+    }
+
+    private fun median(buffer: ArrayDeque<Double>): Double {
+        if (buffer.isEmpty()) return 0.0
+        val sorted = buffer.sorted()
+        return sorted[sorted.size / 2]
+    }
+
+    private fun mapProbeMode(modeRaw: String): ProbeModeState {
+        return when (modeRaw.uppercase()) {
+            "DIODE", "OPEN", "SHORT" -> if (probeActiveMode.uppercase() == "OHM") ProbeModeState.OHM else ProbeModeState.DIODE
+            "OHM" -> ProbeModeState.OHM
+            else -> ProbeModeState.VOLT
+        }
+    }
+
+    private fun filterProbeReading(mode: ProbeModeState, display: String, volt: Double, vdrop: Double, ohm: Double): ProbeReading {
+        val upperDisplay = display.uppercase()
+        val isOpen = upperDisplay == "OL" || upperDisplay == "OPEN"
+        val isShort = upperDisplay == "0MV" || upperDisplay == "SHORT" || upperDisplay == "0Ω" || upperDisplay == "0.0Ω"
+
+        return when (mode) {
+            ProbeModeState.VOLT -> {
+                if (volt < 0.3) {
+                    probeVoltBuffer.clear()
+                    ProbeReading(mode, "0.00 V", "0.00", volt = 0.0)
+                } else {
+                    addToProbeBuffer(probeVoltBuffer, volt)
+                    val stable = if (probeVoltBuffer.size < probeMedianSize) volt else median(probeVoltBuffer)
+                    ProbeReading(mode, "${formatNumber(stable, 3)} V", formatNumber(stable, 3), volt = stable)
+                }
+            }
+            ProbeModeState.DIODE -> {
+                if (isOpen || isShort) {
+                    probeDiodeBuffer.clear()
+                    val displayOut = when {
+                        isOpen -> "OL"
+                        display.isBlank() -> "0mV"
+                        else -> display
+                    }
+                    ProbeReading(mode, displayOut, displayOut, vdrop = 0.0, isOpen = isOpen, isShort = isShort)
+                } else {
+                    val mv = if (vdrop > 0.0) vdrop * 1000.0 else (display.removeSuffix("mV").trim().toDoubleOrNull() ?: 0.0)
+                    addToProbeBuffer(probeDiodeBuffer, mv)
+                    val stableMv = if (probeDiodeBuffer.size < probeMedianSize) mv else median(probeDiodeBuffer)
+                    val stableV = stableMv / 1000.0
+                    ProbeReading(mode, "${formatNumber(stableV, 3)} V", formatNumber(stableMv, 0), vdrop = stableV)
+                }
+            }
+            ProbeModeState.OHM -> {
+                if (isOpen || isShort) {
+                    probeOhmBuffer.clear()
+                    val displayOut = if (isOpen) "OL" else "0Ω"
+                    ProbeReading(mode, displayOut, displayOut, ohm = if (isOpen) 0.0 else 0.0, isOpen = isOpen, isShort = isShort)
+                } else {
+                    val ohmValue = when {
+                        ohm > 0.0 -> ohm
+                        display.endsWith("MΩ") -> (display.removeSuffix("MΩ").trim().toDoubleOrNull() ?: 0.0) * 1_000_000.0
+                        display.endsWith("KΩ") -> (display.removeSuffix("KΩ").trim().toDoubleOrNull() ?: 0.0) * 1_000.0
+                        display.endsWith("Ω") -> display.removeSuffix("Ω").trim().toDoubleOrNull() ?: 0.0
+                        else -> display.trim().toDoubleOrNull() ?: 0.0
+                    }
+                    addToProbeBuffer(probeOhmBuffer, ohmValue)
+                    val med = if (probeOhmBuffer.size < probeMedianSize) ohmValue else median(probeOhmBuffer)
+                    val deadband = when {
+                        med >= 1_000_000.0 -> 5000.0
+                        med >= 1_000.0 -> 500.0
+                        else -> 1.0
+                    }
+                    val stable = if (probeLastStableOhm != 0.0 && kotlin.math.abs(med - probeLastStableOhm) < deadband) {
+                        probeLastStableOhm
+                    } else {
+                        probeLastStableOhm = med
+                        med
+                    }
+                    val text = when {
+                        stable >= 1_000_000.0 -> "${formatNumber(stable / 1_000_000.0, 2)}MΩ"
+                        stable >= 1_000.0 -> "${formatNumber(stable / 1_000.0, 3)}KΩ"
+                        else -> "${formatNumber(stable, 1)}Ω"
+                    }
+                    ProbeReading(mode, text, text, ohm = stable)
+                }
+            }
+        }
+    }
+
+    private fun appendProbeHistory(reading: ProbeReading) {
+        val isGnd = when (reading.mode) {
+            ProbeModeState.VOLT -> reading.volt == 0.0
+            ProbeModeState.DIODE -> reading.vdrop < 0.05
+            ProbeModeState.OHM -> reading.display == "0Ω"
+        }
+        val isValid = when (reading.mode) {
+            ProbeModeState.VOLT -> reading.volt > 0.0
+            ProbeModeState.DIODE, ProbeModeState.OHM -> !reading.isOpen
+        }
+        if (!isValid) {
+            probeStableDisplay = ""
+            return
+        }
+        if (isGnd && !probeHasStartedMeasuring) return
+        if (!isGnd) probeHasStartedMeasuring = true
+
+        val displayHistory = if (isGnd) "GND" else reading.display
+        val now = System.currentTimeMillis()
+        if (displayHistory != probeStableDisplay) {
+            probeStableDisplay = displayHistory
+            probeStableStartMs = now
+            return
+        }
+        if (now - probeStableStartMs < probeStableDurationMs) return
+
+        val entry = ProbeHistoryEntry(
+            timestampMs = now,
+            mode = reading.mode,
+            display = displayHistory,
+            label = if (isGnd) "GND" else ""
+        )
+        val target = if (reading.mode == ProbeModeState.VOLT) probeHistoryAktif else probeHistoryPasif
+        target.add(0, entry)
+        while (target.size > 20) target.removeLast()
+        probeStableStartMs = Long.MAX_VALUE
+        refreshProbeHistory()
     }
 
     private fun sendUart() {
@@ -1404,31 +1619,36 @@ class RPhoneDesktopApp : Application() {
                         psuWaveState.addSample(curr, volt, volt * curr)
                         drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple, psuWaveState)
                     } else if (jsonText.contains("\"probe\"")) {
-                        val probeMode = extractStringFromJson("probe") ?: "VOLT"
+                        val probeMode = extractStringFromJson("probe") ?: probeActiveMode
                         if (probeMode.equals("SETTLING", ignoreCase = true)) {
                             probeSettlingUntilMs = System.currentTimeMillis() + probeCooldownMs(probeActiveMode)
                             probeValue.text = "---"
                         } else if (System.currentTimeMillis() >= probeSettlingUntilMs) {
-                            when (probeMode.uppercase()) {
-                                "VOLT" -> {
-                                    val volt = extractDoubleFromJson("volt") ?: 0.0
+                            val volt = extractDoubleFromJson("volt") ?: 0.0
+                            val vdrop = extractDoubleFromJson("vdrop") ?: 0.0
+                            val ohm = extractDoubleFromJson("ohm") ?: 0.0
+                            val displayRaw = extractStringFromJson("display") ?: ""
+                            val mappedMode = mapProbeMode(probeMode)
+                            val filtered = filterProbeReading(mappedMode, displayRaw, volt, vdrop, ohm)
+
+                            when (filtered.mode) {
+                                ProbeModeState.VOLT -> {
                                     probeModeLabel.text = "TEGANGAN"
-                                    probeValue.text = formatNumber(volt, 3)
-                                    probeVoltageLabel.text = formatNumber(volt, 3) + " V"
+                                    probeValue.text = filtered.valueOnly
+                                    probeVoltageLabel.text = filtered.display
                                 }
-                                "DIODE" -> {
-                                    val vdrop = extractDoubleFromJson("vdrop") ?: 0.0
+                                ProbeModeState.DIODE -> {
                                     probeModeLabel.text = "DIODA"
-                                    probeValue.text = formatNumber(vdrop * 1000.0, 0)
-                                    probeDiodeLabel.text = formatNumber(vdrop, 3) + " V"
+                                    probeValue.text = filtered.valueOnly
+                                    probeDiodeLabel.text = filtered.display
                                 }
-                                "OHM" -> {
-                                    val ohm = extractDoubleFromJson("ohm") ?: 0.0
+                                ProbeModeState.OHM -> {
                                     probeModeLabel.text = "OHM"
-                                    probeValue.text = formatNumber(ohm, 1)
-                                    probeOhmLabel.text = formatNumber(ohm, 1) + " Ω"
+                                    probeValue.text = filtered.valueOnly
+                                    probeOhmLabel.text = filtered.display
                                 }
                             }
+                            appendProbeHistory(filtered)
                             // auto-save or history item indicators from device
                             val autoSave = extractBooleanFromJson("auto_save") ?: false
                             val probeSavedFlag = extractBooleanFromJson("probe_saved") ?: false
@@ -1541,15 +1761,28 @@ class RPhoneDesktopApp : Application() {
 
     private fun refreshProbeHistory() {
         scope.launch {
-            // include both .txt and .json probe snapshots
-            val allFiles = storage.listFiles().filter { it.startsWith("probe-") && (it.endsWith(".txt") || it.endsWith(".json")) }
-            val filtered = when (probeCurrentFilter) {
-                "PASIF" -> allFiles.filter { it.contains("-OHM-") || it.contains("-DIO-") || it.contains("-DIO") }
-                "AKTIF" -> allFiles.filter { it.contains("-VOL-") || it.contains("-TEG-") || it.contains("-VOL") }
-                else -> allFiles
+            val inMemory = when (probeCurrentFilter) {
+                "PASIF" -> probeHistoryPasif.map { it.asLine() }
+                "AKTIF" -> probeHistoryAktif.map { it.asLine() }
+                else -> (probeHistoryAktif + probeHistoryPasif)
+                    .sortedByDescending { it.timestampMs }
+                    .map { it.asLine() }
             }
+
+            val lines = if (inMemory.isNotEmpty()) {
+                inMemory
+            } else {
+                // fallback to file snapshots when history has not been built yet
+                val allFiles = storage.listFiles().filter { it.startsWith("probe-") && (it.endsWith(".txt") || it.endsWith(".json")) }
+                when (probeCurrentFilter) {
+                    "PASIF" -> allFiles.filter { it.contains("-OHM-") || it.contains("-DIO-") || it.contains("-DIO") }
+                    "AKTIF" -> allFiles.filter { it.contains("-VOL-") || it.contains("-TEG-") || it.contains("-VOL") }
+                    else -> allFiles
+                }.sortedDescending()
+            }
+
             withContext(Dispatchers.Main) {
-                probeHistoryList.items.setAll(filtered.sortedDescending())
+                probeHistoryList.items.setAll(lines)
             }
         }
     }
@@ -2031,13 +2264,35 @@ class RPhoneDesktopApp : Application() {
         scope.launch {
             sendCommand("BUZZ_SIAP_REKAM")
             val filename = "wave-${LocalTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))}.rphp"
+            val userSettings = storage.load("user_settings.json").orEmpty()
+            val username = Regex("\"username\"\\s*:\\s*\"([^\"]+)\"")
+                .find(userSettings)
+                ?.groups
+                ?.get(1)
+                ?.value
+                .orEmpty()
             val data = buildString {
                 appendLine("R-Phone V3 WaveID Profile")
                 appendLine("Time: ${LocalTime.now()}")
                 appendLine("Generated: desktop sample capture")
+                if (username.isNotBlank()) {
+                    appendLine("Username: $username")
+                }
                 appendLine()
                 appendLine("--raw--")
                 append(receiveBuffer.toString())
+            }
+            val profileJson = buildString {
+                appendLine("{")
+                appendLine("  \"brand\": \"Desktop\",")
+                appendLine("  \"model\": \"RPhoneV3\",")
+                appendLine("  \"kondisi\": \"Captured\",")
+                appendLine("  \"username\": \"${escapeJson(username.ifBlank { "Teknisi" })}\",")
+                appendLine("  \"tanggal\": ${System.currentTimeMillis()},")
+                appendLine("  \"modeRekam\": \"WAVE\",")
+                appendLine("  \"namaFile\": \"${escapeJson(filename)}\",")
+                appendLine("  \"waveformJson\": \"${escapeJson(receiveBuffer.toString())}\"")
+                appendLine("}")
             }
             val ok = storage.save(filename, data)
             withContext(Dispatchers.Main) {
@@ -2051,7 +2306,27 @@ class RPhoneDesktopApp : Application() {
                         source = "local",
                         sizeBytes = data.toByteArray(Charsets.UTF_8).size.toLong()
                     )
-                    refreshFileLists()
+                    // Attempt background upload to Supabase
+                    scope.launch {
+                        val uploadedRphp = try {
+                            SupabaseUploader.uploadText("WAVE/$filename", data)
+                        } catch (e: Exception) {
+                            false
+                        }
+                        val uploadedJson = try {
+                            SupabaseUploader.uploadJson("WAVE/${filename.removeSuffix(".rphp")}.json", profileJson)
+                        } catch (e: Exception) {
+                            false
+                        }
+                        withContext(Dispatchers.Main) {
+                            if (uploadedRphp || uploadedJson) {
+                                notification.showSuccess("Uploaded profile to cloud: $filename")
+                            } else {
+                                notification.showMessage("Profile saved locally: $filename (upload failed)")
+                            }
+                            refreshFileLists()
+                        }
+                    }
                 } else {
                     notification.showError("Gagal menyimpan profile")
                 }
