@@ -900,7 +900,9 @@ class RPhoneDesktopApp : Application() {
 
     private fun chartPanel(canvas: Canvas): Node {
         val wrapper = StackPane(canvas).apply {
-            minHeight = 360.0
+            prefHeight = 320.0
+            minHeight = 320.0
+            maxHeight = 320.0
             style = "-fx-background-color: #080C14; -fx-border-color: #131D2E; -fx-border-width: 1;"
         }
         canvas.widthProperty().bind(wrapper.widthProperty())
@@ -1017,10 +1019,16 @@ class RPhoneDesktopApp : Application() {
             DesktopPage.USB -> {
                 pageTitle.text = "R-Phone V3 — USB"
                 pageBadge.text = "USB MODE"
+                if (serial.isConnected()) {
+                    sendCommand("SET_MODE_USB")
+                }
             }
             DesktopPage.PSU -> {
                 pageTitle.text = "R-Phone V3 — PSU"
                 pageBadge.text = "PSU MODE"
+                if (serial.isConnected()) {
+                    sendCommand("SET_MODE_PSU")
+                }
             }
             DesktopPage.PROBE -> {
                 pageTitle.text = "R-Phone V3 — PROBE"
@@ -1088,9 +1096,10 @@ class RPhoneDesktopApp : Application() {
                     updateConnectionState(true, device)
                     startReceiveLoop()
                     appendConsole("SYSTEM", "Connected to ${device.name}")
-                    sendCommand("SET_MODE_USB")
-                    if (activePage == DesktopPage.PROBE) {
-                        switchProbeMode(probeActiveMode)
+                    when (activePage) {
+                        DesktopPage.PSU -> sendCommand("SET_MODE_PSU")
+                        DesktopPage.PROBE -> switchProbeMode(probeActiveMode)
+                        else -> sendCommand("SET_MODE_USB")
                     }
                 } else {
                     notification.showError("Gagal connect ke ${device.name}")
