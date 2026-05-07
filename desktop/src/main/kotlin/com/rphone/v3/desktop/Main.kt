@@ -43,6 +43,7 @@ import javafx.scene.layout.StackPane
 import javafx.scene.layout.ColumnConstraints
 import javafx.scene.layout.VBox
 import javafx.scene.paint.Color
+import javafx.scene.effect.DropShadow
 import javafx.scene.text.Font
 import javafx.stage.Stage
 import javafx.util.StringConverter
@@ -50,6 +51,7 @@ import javafx.animation.KeyFrame
 import javafx.animation.Timeline
 import javafx.util.Duration
 import javafx.scene.input.MouseEvent
+import javafx.scene.control.ToggleGroup
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -90,6 +92,7 @@ class RPhoneDesktopApp : Application() {
     private lateinit var connectionStatus: Label
     private lateinit var connectionDevice: Label
     private lateinit var uartConsole: TextArea
+    private lateinit var uartParsedConsole: TextArea
     private lateinit var uartInput: TextField
     private lateinit var uartFileList: ListView<String>
     private lateinit var probeHistoryList: ListView<String>
@@ -153,6 +156,8 @@ class RPhoneDesktopApp : Application() {
     private var psuPwmEnabled = false
     private var psuPwmDurationMs = 2000
     private var psuOcpStatus = "OFF"
+    private var waveModeFilter = "ALL"
+    private var uartCustomRules = mutableListOf<String>()
     private val waveIndexFileName = "wave_profiles_index.json"
     private val usbWaveState = DesktopWaveformState()
     private val psuWaveState = DesktopWaveformState()
@@ -269,10 +274,11 @@ class RPhoneDesktopApp : Application() {
         }
 
         stage.title = "R-Phone V3 Desktop"
-        stage.width = 1400.0
-        stage.height = 820.0
+        stage.width = 1280.0
+        stage.height = 760.0
         stage.minWidth = 1200.0
-        stage.minHeight = 720.0
+        stage.minHeight = 700.0
+        stage.isMaximized = false
         stage.scene = Scene(root)
         stage.show()
 
@@ -431,7 +437,7 @@ class RPhoneDesktopApp : Application() {
 
         usbDeviceCountLabel = label("0 device", muted, 10.0, false)
 
-        usbChartCanvas = Canvas(900.0, 420.0)
+        usbChartCanvas = Canvas(700.0, 320.0)
         usbChartCanvas.widthProperty().addListener { _, _, _ -> drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan, usbWaveState) }
         usbChartCanvas.heightProperty().addListener { _, _, _ -> drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan, usbWaveState) }
 
@@ -456,9 +462,9 @@ class RPhoneDesktopApp : Application() {
         val chartCard = card("WAVEFORM", VBox(8.0).apply {
             children.addAll(tabs, chartPanel(usbChartCanvas), chartFooter(cyan))
         }).apply {
-            prefWidth = 720.0
-            minWidth = 720.0
-            maxWidth = 720.0
+            prefWidth = 700.0
+            minWidth = 700.0
+            maxWidth = 700.0
         }
 
         val actionPanel = card("Quick Action", VBox(8.0).apply {
@@ -480,20 +486,21 @@ class RPhoneDesktopApp : Application() {
 
         val leftColumn = VBox(10.0).apply {
             prefWidth = 430.0
+            minWidth = 430.0
             maxWidth = 430.0
             children.addAll(
-                connectionCard("USB DEVICE", cyan),
+                connectionCard("USB MODE", cyan),
                 card("USB Metrics", metrics),
                 actionPanel
             )
         }
 
         val topSplit = HBox(10.0).apply {
+            alignment = Pos.TOP_CENTER
             children.addAll(leftColumn, chartCard)
-            HBox.setHgrow(chartCard, Priority.ALWAYS)
         }
 
-        return scrollPage(VBox(10.0).apply {
+        return plainPage(VBox(10.0).apply {
             children.addAll(
                 header,
                 topSplit
@@ -508,26 +515,25 @@ class RPhoneDesktopApp : Application() {
         psuMetricCapacity = metricValue("--", textSecondary)
         psuMetricOcp = metricValue("OFF", red)
 
-        psuChartCanvas = Canvas(900.0, 420.0)
+        psuChartCanvas = Canvas(700.0, 320.0)
         psuChartCanvas.widthProperty().addListener { _, _, _ -> drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple, psuWaveState) }
         psuChartCanvas.heightProperty().addListener { _, _, _ -> drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple, psuWaveState) }
 
         psuPwmButton = Button("PWM OFF").apply {
-            style = buttonStyle(textSecondary, "#111827", "#64748B")
+            style = activePsuButtonStyle(false, purple)
             setOnAction {
-                val nowEnabled = psuPwmEnabled
-                if (nowEnabled) {
-                    sendCommands("BUZZ_PWM_OFF", "PWM_OFF")
-                    psuPwmEnabled = false
-                } else {
+                psuPwmEnabled = !psuPwmEnabled
+                if (psuPwmEnabled) {
                     sendCommands("BUZZ_PWM_ON", "PWM_ON")
-                    psuPwmEnabled = true
+                } else {
+                    sendCommands("BUZZ_PWM_OFF", "PWM_OFF")
                 }
                 text = if (psuPwmEnabled) "PWM ON" else "PWM OFF"
+                style = activePsuButtonStyle(psuPwmEnabled, purple)
             }
         }
         psuOcpButton = Button("OCP OFF").apply {
-            style = buttonStyle(textSecondary, "#111827", "#64748B")
+            style = activePsuButtonStyle(false, red)
             setOnAction {
                 when (psuOcpStatus) {
                     "TRIP" -> {
@@ -548,6 +554,7 @@ class RPhoneDesktopApp : Application() {
                     "ON" -> "OCP ON"
                     else -> "OCP OFF"
                 }
+                style = activePsuButtonStyle(psuOcpStatus == "ON", red)
             }
         }
 
@@ -567,6 +574,7 @@ class RPhoneDesktopApp : Application() {
 
         val leftColumn = VBox(10.0).apply {
             prefWidth = 360.0
+            minWidth = 360.0
             maxWidth = 360.0
             children.addAll(
                 card("PSU Metrics", metricsPanel(
@@ -595,16 +603,17 @@ class RPhoneDesktopApp : Application() {
                 chartFooter(purple)
             )
         }).apply {
-            prefWidth = 720.0
-            minWidth = 720.0
-            maxWidth = 720.0
+            prefWidth = 700.0
+            minWidth = 700.0
+            maxWidth = 700.0
         }
 
         val topSplit = HBox(10.0).apply {
+            alignment = Pos.TOP_CENTER
             children.addAll(leftColumn, rightColumn)
         }
 
-        return scrollPage(VBox(10.0).apply {
+        return plainPage(VBox(10.0).apply {
             children.addAll(
                 pageHeader("PSU MODE", purple, "SET_MODE_PSU"),
                 topSplit
@@ -625,7 +634,8 @@ class RPhoneDesktopApp : Application() {
 
         probeHistoryList = ListView(FXCollections.observableArrayList<String>()).apply {
             prefHeight = 420.0
-            style = controlStyle()
+            style = historyListStyle()
+            applyHistoryCellStyle(this)
         }
 
         val modeTabs = tabRow(
@@ -652,26 +662,21 @@ class RPhoneDesktopApp : Application() {
 
         val leftColumn = VBox(10.0).apply {
             prefWidth = 460.0
+            minWidth = 460.0
             children.addAll(
                 topCard,
                 card("Mode Tabs", modeTabs),
-                card("Probe Actions", VBox(8.0).apply {
-                    children.addAll(
-                        primaryActionButton("MULAI ANALISA", amber) { sendCommands("PROBE_ANALYZE","BUZZ_MULAI_ANALISA") },
-                        actionButtonsRow(
-                            secondaryActionButton("SIMPAN DATA", amber) { saveProbeSnapshot() },
-                            secondaryActionButton("LIHAT DETAIL", textPrimary) { notification.showMessage("Detail probe dibuka di shell ini") },
-                            secondaryActionButton("COMPARE", purple) { selectPage(DesktopPage.WAVEID) }
-                        )
-                    )
-                })
+                actionButtonsRow(
+                    primaryActionButton("MULAI ANALISA", amber) { sendCommands("PROBE_ANALYZE", "BUZZ_MULAI_ANALISA") },
+                    secondaryActionButton("SIMPAN DATA", amber) { saveProbeSnapshot() },
+                    secondaryActionButton("COMPARE", purple) { selectPage(DesktopPage.WAVEID) }
+                )
             )
         }
 
         val rightColumn = card("Riwayat", VBox(8.0).apply {
             children.addAll(
                 actionButtonsRow(
-                    secondaryActionButton("COMPARE", purple) { selectPage(DesktopPage.WAVEID) },
                     secondaryActionButton("PASIF", cyan) { filterProbeHistory("PASIF") },
                     secondaryActionButton("AKTIF", green) { filterProbeHistory("AKTIF") }
                 ),
@@ -679,12 +684,14 @@ class RPhoneDesktopApp : Application() {
             )
         })
 
+        rightColumn.style = darkHistoryCardStyle()
+
         val split = HBox(10.0).apply {
+            alignment = Pos.TOP_CENTER
             children.addAll(leftColumn, rightColumn)
-            HBox.setHgrow(rightColumn, Priority.ALWAYS)
         }
 
-        return scrollPage(VBox(10.0).apply {
+        return plainPage(VBox(10.0).apply {
             children.addAll(
                 pageHeader("PROBE MODE", amber, "PROBE"),
                 split
@@ -694,24 +701,20 @@ class RPhoneDesktopApp : Application() {
 
     private fun buildWaveIdPage(): Node {
         waveHistoryList = ListView(FXCollections.observableArrayList<String>()).apply {
-            prefHeight = 180.0
-            style = controlStyle()
+            isVisible = false
+            isManaged = false
         }
+
+        waveDbCountLabel = label("0", green, 44.0, true)
 
         val leftPane = VBox(10.0).apply {
             prefWidth = 420.0
+            minWidth = 420.0
             children.addAll(
                 card("WAVEID", VBox(6.0).apply {
                     children.addAll(
                         label("∿ WAVEID", green, 40.0 / 2.0, true),
                         label("Analisa & identifikasi arus boot smartphone", textSecondary, 12.0, false)
-                    )
-                }),
-                card("DATABASE", VBox(4.0).apply {
-                    waveDbCountLabel = label("0", green, 44.0, true)
-                    children.addAll(
-                        waveDbCountLabel,
-                        label("profil", textPrimary, 18.0, false)
                     )
                 })
             )
@@ -727,19 +730,18 @@ class RPhoneDesktopApp : Application() {
         }
 
         val rightPane = VBox(10.0).apply {
-            children.addAll(
-                tileGrid,
-                card("Database / Riwayat", waveHistoryList)
-            )
-            HBox.setHgrow(this, Priority.ALWAYS)
+            children.addAll(tileGrid)
+            prefWidth = 720.0
+            minWidth = 720.0
+            maxWidth = 720.0
         }
 
         val split = HBox(10.0).apply {
+            alignment = Pos.TOP_CENTER
             children.addAll(leftPane, rightPane)
-            HBox.setHgrow(rightPane, Priority.ALWAYS)
         }
 
-        return scrollPage(VBox(10.0).apply {
+        return plainPage(VBox(10.0).apply {
             children.addAll(
                 pageHeader("WAVE ID", green, "WAVE ID"),
                 split
@@ -747,10 +749,18 @@ class RPhoneDesktopApp : Application() {
         })
     }
 
+    private fun setWaveModeFilter(mode: String) {
+        waveModeFilter = mode
+        refreshWaveHistory()
+    }
+
     private fun waveTile(icon: String, title: String, subtitle: String, action: () -> Unit): Node {
         return Button().apply {
             maxWidth = Double.MAX_VALUE
+            minWidth = 0.0
             prefHeight = 130.0
+            isMnemonicParsing = false
+            isFocusTraversable = false
             style = cardStyle()
             graphic = VBox(4.0).apply {
                 alignment = Pos.CENTER
@@ -765,10 +775,17 @@ class RPhoneDesktopApp : Application() {
     }
 
     private fun buildUartPage(): Node {
+        loadUartRules()
         uartConsole = TextArea().apply {
             prefRowCount = 18
             wrapTextProperty().set(true)
-            style = controlStyle()
+            style = terminalStyle()
+        }
+        uartParsedConsole = TextArea().apply {
+            prefRowCount = 8
+            isEditable = false
+            wrapTextProperty().set(true)
+            style = terminalStyle()
         }
         uartInput = TextField().apply {
             promptText = "Kirim perintah UART"
@@ -794,7 +811,7 @@ class RPhoneDesktopApp : Application() {
             HBox.setHgrow(uartInput, Priority.ALWAYS)
         }
 
-        return scrollPage(VBox(10.0).apply {
+        return plainPage(VBox(10.0).apply {
             children.addAll(
                 pageHeader("UART", Color.web("#14B8A6"), "UART"),
                 card("Serial Console", VBox(8.0).apply {
@@ -804,7 +821,17 @@ class RPhoneDesktopApp : Application() {
                         actionButtonsRow(
                             secondaryActionButton("SAVE LOG", cyan) { saveUartLog() },
                             secondaryActionButton("EXPORT", cyan) { exportUartLog() },
-                            secondaryActionButton("REFRESH PORT", cyan) { refreshDevices() }
+                            secondaryActionButton("REFRESH PORT", cyan) { refreshDevices() },
+                            secondaryActionButton("PARSE", purple) { parseUartLog() }
+                        )
+                    )
+                }),
+                card("Parsed Output", VBox(8.0).apply {
+                    children.addAll(
+                        uartParsedConsole,
+                        actionButtonsRow(
+                            secondaryActionButton("Add Rule", purple) { addUartRule() },
+                            secondaryActionButton("Save Rules", green) { saveUartRules() }
                         )
                     )
                 }),
@@ -816,18 +843,40 @@ class RPhoneDesktopApp : Application() {
     private fun buildSettingsPage(): Node {
         val modeCombo = ComboBox(FXCollections.observableArrayList("auto", "bt", "otg")).apply {
             value = "auto"
+            style = comboStyle()
         }
         val autoRefresh = CheckBox("Auto refresh ports").apply {
             isSelected = true
         }
         settingsStatus = label("Ready", textSecondary, 11.0, false)
 
+        val dtwThresholdLabel = label("100%", cyan, 14.0, true)
+
         // AI provider settings
         val aiProviders = FXCollections.observableArrayList("liteLLM", "claude", "groq", "gemini")
-        val aiCombo = ComboBox<String>(aiProviders).apply { value = "liteLLM" }
+        val aiCombo = ComboBox<String>(aiProviders).apply {
+            value = "liteLLM"
+            style = comboStyle()
+        }
         val aiApiKey = TextField().apply { promptText = "API Key"; style = controlStyle() }
-        val aiBaseUrl = TextField().apply { promptText = "Base URL (liteLLM)"; style = controlStyle() }
+        val aiBaseUrl = TextField().apply { promptText = "Base URL (liteLLM only)"; style = controlStyle() }
         settingsUsernameField = TextField().apply { promptText = "Nama teknisi (username)"; style = controlStyle() }
+
+        val dtwSlider = Slider(90.0, 100.0, 100.0).apply {
+            isShowTickMarks = true
+            isShowTickLabels = true
+            majorTickUnit = 5.0
+            blockIncrement = 1.0
+            valueProperty().addListener { _, _, newValue ->
+                dtwThresholdLabel.text = "${newValue.toInt()}%"
+            }
+        }
+
+        fun syncAiFields() {
+            val showBaseUrl = aiCombo.value == "liteLLM"
+            aiBaseUrl.isVisible = showBaseUrl
+            aiBaseUrl.isManaged = showBaseUrl
+        }
 
         fun saveAiConfig() {
             scope.launch {
@@ -835,7 +884,9 @@ class RPhoneDesktopApp : Application() {
                     appendLine("{")
                     appendLine("  \"provider\": \"${aiCombo.value}\",")
                     appendLine("  \"apiKey\": \"${aiApiKey.text}\",")
-                    appendLine("  \"baseUrl\": \"${aiBaseUrl.text}\"")
+                    if (aiCombo.value == "liteLLM") {
+                        appendLine("  \"baseUrl\": \"${aiBaseUrl.text}\"")
+                    }
                     appendLine("}")
                 }
                 val ok = storage.save("ai_settings.json", json)
@@ -883,6 +934,7 @@ class RPhoneDesktopApp : Application() {
                     if (p != null) aiCombo.value = p
                     if (k != null) aiApiKey.text = k
                     if (u != null) aiBaseUrl.text = u
+                    syncAiFields()
                 }
             }
             // load username
@@ -897,7 +949,10 @@ class RPhoneDesktopApp : Application() {
             }
         }
 
-        return scrollPage(VBox(10.0).apply {
+        aiCombo.valueProperty().addListener { _, _, _ -> syncAiFields() }
+        syncAiFields()
+
+        return plainPage(VBox(10.0).apply {
             children.addAll(
                 pageHeader("SETTINGS", textSecondary, "SET"),
                 card("Connection Settings", VBox(8.0).apply {
@@ -912,21 +967,36 @@ class RPhoneDesktopApp : Application() {
                         settingsStatus
                     )
                 }),
+                card("Profil Teknisi", VBox(8.0).apply {
+                    children.addAll(
+                        label("Nama teknisi", textSecondary, 11.0, true),
+                        settingsUsernameField,
+                        actionButtonsRow(
+                            primaryActionButton("SIMPAN USER", green) { saveUserConfig() }
+                        )
+                    )
+                }),
                 card("AI Provider", VBox(8.0).apply {
                     children.addAll(
                         label("AI PROVIDER", textSecondary, 11.0, true),
                         aiCombo,
                         label("API Key", textSecondary, 11.0, true),
                         aiApiKey,
-                        label("Base URL", textSecondary, 11.0, true),
                         aiBaseUrl,
-                        label("Username", textSecondary, 11.0, true),
-                        settingsUsernameField,
                         actionButtonsRow(
                             secondaryActionButton("Fetch Models", purple) { notification.showMessage("Fetching models (stub)...") },
                             primaryActionButton("SIMPAN KONFIGURASI AI", green) { saveAiConfig() },
-                            secondaryActionButton("SIMPAN USER", green) { saveUserConfig() }
+                            secondaryActionButton("DTW ${dtwThresholdLabel.text}", cyan) { notification.showMessage("Ambang DTW aktif: ${dtwThresholdLabel.text}") }
                         )
+                    )
+                }),
+                card("Ambang DTW", VBox(8.0).apply {
+                    children.addAll(
+                        label("Semakin tinggi presentase, pencocokan data semakin ketat", textSecondary, 11.0, false),
+                        HBox(8.0).apply {
+                            children.addAll(dtwSlider, dtwThresholdLabel)
+                            HBox.setHgrow(dtwSlider, Priority.ALWAYS)
+                        }
                     )
                 }),
                 card("About", VBox(6.0).apply {
@@ -1005,17 +1075,20 @@ class RPhoneDesktopApp : Application() {
     private data class TabDef(val text: String, val accent: Color, val onAction: () -> Unit)
 
     private fun tabRow(defs: List<TabDef>): Node {
+        val group = ToggleGroup()
         return HBox(6.0).apply {
             children.addAll(defs.mapIndexed { index, def ->
-                val button = ToggleButton(def.text).apply {
-                    style = tabStyle(def.accent, index == 0)
+                ToggleButton(def.text).apply {
+                    toggleGroup = group
                     isSelected = index == 0
+                    maxWidth = Double.MAX_VALUE
+                    prefWidth = 88.0
+                    style = tabStyle(def.accent, index == 0)
                     selectedProperty().addListener { _, _, selected ->
                         style = tabStyle(def.accent, selected)
                     }
                     setOnAction { def.onAction() }
                 }
-                button
             })
         }
     }
@@ -1032,6 +1105,7 @@ class RPhoneDesktopApp : Application() {
     }
 
     private fun waveTabRow(state: DesktopWaveformState, accent: Color, canvas: Canvas): Node {
+        val group = ToggleGroup()
         return HBox(6.0).apply {
             children.addAll(
                 listOf(
@@ -1041,7 +1115,10 @@ class RPhoneDesktopApp : Application() {
                     WaveChannel.ALL to "ALL"
                 ).map { (channel, text) ->
                     ToggleButton(text).apply {
+                        toggleGroup = group
                         isSelected = state.activeChannel == channel
+                        maxWidth = Double.MAX_VALUE
+                        prefWidth = 88.0
                         style = tabStyle(accent, isSelected)
                         selectedProperty().addListener { _, _, selected ->
                             style = tabStyle(accent, selected)
@@ -1059,6 +1136,9 @@ class RPhoneDesktopApp : Application() {
 
     private fun chartPanel(canvas: Canvas): Node {
         val wrapper = StackPane(canvas).apply {
+            prefWidth = 700.0
+            minWidth = 700.0
+            maxWidth = 700.0
             prefHeight = 320.0
             minHeight = 320.0
             maxHeight = 320.0
@@ -1126,14 +1206,25 @@ class RPhoneDesktopApp : Application() {
         return VBox(8.0).apply {
             padding = Insets(12.0)
             style = cardStyle()
+            maxWidth = Double.MAX_VALUE
             children.addAll(label(title, textPrimary, 13.0, true), content)
+        }
+    }
+
+    private fun plainPage(content: VBox): Node {
+        content.style = "-fx-background-color: transparent;"
+        content.prefWidth = 1260.0
+        content.maxWidth = 1260.0
+        return StackPane(content).apply {
+            padding = Insets(0.0, 12.0, 12.0, 12.0)
+            alignment = Pos.TOP_CENTER
         }
     }
 
     private fun scrollPage(content: VBox): Node {
         content.style = "-fx-background-color: transparent;"
         return javafx.scene.control.ScrollPane(content).apply {
-            isFitToWidth = true
+            isFitToWidth = false
             hbarPolicy = javafx.scene.control.ScrollPane.ScrollBarPolicy.NEVER
             vbarPolicy = javafx.scene.control.ScrollPane.ScrollBarPolicy.AS_NEEDED
             style = scrollStyle()
@@ -1946,11 +2037,16 @@ class RPhoneDesktopApp : Application() {
                     val content = f.readText()
                     val ok = storage.save(f.name, content)
                     if (ok) {
+                        val modeTag = when {
+                            f.name.contains("usb", true) -> "USB"
+                            f.name.contains("wave", true) -> "WAVE"
+                            else -> "PSU"
+                        }
                         imported++
                         upsertWaveIndex(
                             filename = f.name,
                             label = f.name.removeSuffix(".rphp"),
-                            mode = "PSU",
+                            mode = modeTag,
                             source = "import",
                             sizeBytes = content.toByteArray(Charsets.UTF_8).size.toLong()
                         )
@@ -1985,6 +2081,67 @@ class RPhoneDesktopApp : Application() {
         }
     }
 
+    private fun loadUartRules() {
+        scope.launch {
+            val raw = storage.load("uart_custom_rules.txt").orEmpty()
+            val lines = raw.lines().map { it.trim() }.filter { it.isNotBlank() }.distinct()
+            uartCustomRules = lines.toMutableList()
+        }
+    }
+
+    private fun saveUartRules() {
+        scope.launch {
+            val ok = storage.save("uart_custom_rules.txt", uartCustomRules.joinToString("\n"))
+            withContext(Dispatchers.Main) {
+                if (ok) notification.showSuccess("UART rules tersimpan") else notification.showError("Gagal simpan UART rules")
+            }
+        }
+    }
+
+    private fun addUartRule() {
+        val candidate = uartInput.text.trim()
+        if (candidate.isBlank()) {
+            notification.showMessage("Isi keyword rule di input UART lalu klik Add Rule")
+            return
+        }
+        if (!uartCustomRules.contains(candidate)) {
+            uartCustomRules.add(candidate)
+        }
+        uartInput.clear()
+        notification.showSuccess("Rule ditambahkan: $candidate")
+    }
+
+    private fun parseUartLog() {
+        val text = uartConsole.text.orEmpty()
+        val lines = text.lines()
+        if (lines.isEmpty()) {
+            uartParsedConsole.text = "No UART logs"
+            return
+        }
+
+        val found = mutableListOf<String>()
+        val baseRules = listOf("boot", "error", "fail", "reset", "panic", "temperature", "voltage", "current")
+        val rules = (baseRules + uartCustomRules).distinct()
+        rules.forEach { rule ->
+            val count = lines.count { it.contains(rule, ignoreCase = true) }
+            if (count > 0) {
+                found.add("$rule : $count")
+            }
+        }
+        val preview = lines.takeLast(20)
+        uartParsedConsole.text = buildString {
+            appendLine("Parsed Summary")
+            if (found.isEmpty()) {
+                appendLine("No known patterns found")
+            } else {
+                found.forEach { appendLine(it) }
+            }
+            appendLine()
+            appendLine("Recent Lines")
+            preview.forEach { appendLine(it) }
+        }
+    }
+
     private fun exportUartLog() {
         scope.launch {
             val filename = "uart-log-export-${LocalTime.now().format(DateTimeFormatter.ofPattern("HHmmss"))}.txt"
@@ -2005,14 +2162,15 @@ class RPhoneDesktopApp : Application() {
             if (entries.isNotEmpty()) {
                 saveWaveIndex(entries)
             }
-            val files = if (entries.isNotEmpty()) {
-                entries.sortedByDescending { it.createdAtMs }.map { formatWaveEntry(it) }
+            val filteredEntries = if (waveModeFilter == "ALL") entries else entries.filter { it.mode.equals(waveModeFilter, true) }
+            val files = if (filteredEntries.isNotEmpty()) {
+                filteredEntries.sortedByDescending { it.createdAtMs }.map { formatWaveEntry(it) }
             } else {
                 storage.listFiles().filter { it.endsWith(".rphp", true) }.sortedDescending()
             }
             withContext(Dispatchers.Main) {
                 waveHistoryList.items.setAll(files)
-                waveDbCountLabel.text = if (entries.isNotEmpty()) entries.size.toString() else files.count { it.endsWith(".rphp", true) }.toString()
+                waveDbCountLabel.text = if (filteredEntries.isNotEmpty()) filteredEntries.size.toString() else files.count { it.endsWith(".rphp", true) }.toString()
                 settingsStatus.text = "Loaded ${files.size} wave profiles"
             }
         }
@@ -2025,7 +2183,8 @@ class RPhoneDesktopApp : Application() {
                 .sortedDescending()
             val indexEntries = loadWaveIndex().ifEmpty { rebuildWaveIndexFromStorage() }
             val orderedWaveFiles = if (indexEntries.isNotEmpty()) {
-                indexEntries.map { it.filename }.filter { it.endsWith(".rphp", true) }.distinct()
+                val modeScoped = if (waveModeFilter == "ALL") indexEntries else indexEntries.filter { it.mode.equals(waveModeFilter, true) }
+                modeScoped.map { it.filename }.filter { it.endsWith(".rphp", true) }.distinct()
             } else {
                 waveFiles
             }
@@ -2248,14 +2407,15 @@ class RPhoneDesktopApp : Application() {
             if (entries.isNotEmpty()) {
                 saveWaveIndex(entries)
             }
-            val labels = if (entries.isNotEmpty()) {
-                entries.sortedByDescending { it.createdAtMs }.map { formatWaveEntry(it) }
+            val filteredEntries = if (waveModeFilter == "ALL") entries else entries.filter { it.mode.equals(waveModeFilter, true) }
+            val labels = if (filteredEntries.isNotEmpty()) {
+                filteredEntries.sortedByDescending { it.createdAtMs }.map { formatWaveEntry(it) }
             } else {
                 storage.listFiles().filter { it.endsWith(".rphp", true) }.sortedDescending()
             }
             withContext(Dispatchers.Main) {
                 waveHistoryList.items.setAll(labels)
-                waveDbCountLabel.text = entries.size.toString()
+                waveDbCountLabel.text = filteredEntries.size.toString()
             }
         }
     }
@@ -2283,13 +2443,20 @@ class RPhoneDesktopApp : Application() {
                 append(receiveBuffer.toString())
             }
             val profileJson = buildString {
+                val modeTag = when {
+                    activePage == DesktopPage.USB -> "USB"
+                    activePage == DesktopPage.PSU -> "PSU"
+                    receiveBuffer.contains("\"mode\":\"USB\"", true) -> "USB"
+                    receiveBuffer.contains("\"mode\":\"PSU\"", true) -> "PSU"
+                    else -> "WAVE"
+                }
                 appendLine("{")
                 appendLine("  \"brand\": \"Desktop\",")
                 appendLine("  \"model\": \"RPhoneV3\",")
                 appendLine("  \"kondisi\": \"Captured\",")
                 appendLine("  \"username\": \"${escapeJson(username.ifBlank { "Teknisi" })}\",")
                 appendLine("  \"tanggal\": ${System.currentTimeMillis()},")
-                appendLine("  \"modeRekam\": \"WAVE\",")
+                appendLine("  \"modeRekam\": \"$modeTag\",")
                 appendLine("  \"namaFile\": \"${escapeJson(filename)}\",")
                 appendLine("  \"waveformJson\": \"${escapeJson(receiveBuffer.toString())}\"")
                 appendLine("}")
@@ -2302,7 +2469,11 @@ class RPhoneDesktopApp : Application() {
                     upsertWaveIndex(
                         filename = filename,
                         label = filename.removeSuffix(".rphp"),
-                        mode = "PSU",
+                        mode = when {
+                            activePage == DesktopPage.USB -> "USB"
+                            activePage == DesktopPage.PSU -> "PSU"
+                            else -> "WAVE"
+                        },
                         source = "local",
                         sizeBytes = data.toByteArray(Charsets.UTF_8).size.toLong()
                     )
@@ -2486,13 +2657,91 @@ class RPhoneDesktopApp : Application() {
 
     private fun controlStyle(): String {
         return """
-            -fx-background-color: #111827;
-            -fx-text-fill: #E2E8F0;
-            -fx-border-color: #131D2E;
+            -fx-background-color: #05070F;
+            -fx-control-inner-background: #05070F;
+            -fx-text-fill: #55D9FF;
+            -fx-prompt-text-fill: #2F7FA0;
+            -fx-border-color: #0B1E2B;
             -fx-border-width: 1;
             -fx-background-radius: 14;
             -fx-border-radius: 14;
         """.trimIndent()
+    }
+
+    private fun terminalStyle(): String {
+        return """
+            -fx-background-color: #05070F;
+            -fx-control-inner-background: #05070F;
+            -fx-text-fill: #55D9FF;
+            -fx-highlight-fill: #12364A;
+            -fx-highlight-text-fill: #D8F7FF;
+            -fx-border-color: #0B1E2B;
+            -fx-border-width: 1;
+            -fx-background-radius: 14;
+            -fx-border-radius: 14;
+            -fx-font-family: 'Consolas';
+        """.trimIndent()
+    }
+
+    private fun historyListStyle(): String {
+        return """
+            -fx-background-color: #05070F;
+            -fx-control-inner-background: #05070F;
+            -fx-text-fill: #55D9FF;
+            -fx-border-color: #0B1E2B;
+            -fx-border-width: 1;
+            -fx-background-radius: 14;
+            -fx-border-radius: 14;
+        """.trimIndent()
+    }
+
+    private fun darkHistoryCardStyle(): String {
+        return "-fx-background-color: linear-gradient(to bottom, #05070F, #070B14); -fx-border-color: #0B1E2B; -fx-border-width: 1; -fx-background-radius: 18; -fx-border-radius: 18;"
+    }
+
+    private fun activePsuButtonStyle(active: Boolean, accent: Color): String {
+        return if (active) {
+            """
+                -fx-background-color: linear-gradient(to bottom, #081420, #0B1E2B);
+                -fx-text-fill: ${accent.toHex()};
+                -fx-border-color: ${accent.toHex()};
+                -fx-border-width: 1.4;
+                -fx-background-radius: 16;
+                -fx-border-radius: 16;
+                -fx-font-size: 11px;
+                -fx-font-weight: bold;
+                -fx-padding: 8 12 8 12;
+            """.trimIndent()
+        } else {
+            """
+                -fx-background-color: #05070F;
+                -fx-text-fill: #627A8B;
+                -fx-border-color: #0B1E2B;
+                -fx-border-width: 1;
+                -fx-background-radius: 16;
+                -fx-border-radius: 16;
+                -fx-font-size: 11px;
+                -fx-font-weight: bold;
+                -fx-padding: 8 12 8 12;
+            """.trimIndent()
+        }
+    }
+
+    private fun applyHistoryCellStyle(listView: ListView<String>) {
+        listView.cellFactory = javafx.util.Callback {
+            object : javafx.scene.control.ListCell<String>() {
+                override fun updateItem(item: String?, empty: Boolean) {
+                    super.updateItem(item, empty)
+                    text = if (empty || item == null) "" else item
+                    style = if (empty || item == null) {
+                        ""
+                    } else {
+                        "-fx-text-fill: #55D9FF; -fx-background-color: transparent; -fx-font-family: 'Consolas';"
+                    }
+                    effect = if (empty || item == null) null else DropShadow(10.0, Color.web("#2BB9FF"))
+                }
+            }
+        }
     }
 
     private fun scrollStyle(): String {
@@ -2505,9 +2754,11 @@ class RPhoneDesktopApp : Application() {
 
     private fun comboStyle(): String {
         return """
-            -fx-background-color: #111827;
-            -fx-text-fill: #E2E8F0;
-            -fx-border-color: #131D2E;
+            -fx-background-color: #05070F;
+            -fx-control-inner-background: #05070F;
+            -fx-text-fill: #55D9FF;
+            -fx-prompt-text-fill: #2F7FA0;
+            -fx-border-color: #0B1E2B;
             -fx-border-width: 1;
             -fx-background-radius: 14;
             -fx-border-radius: 14;
