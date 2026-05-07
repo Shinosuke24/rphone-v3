@@ -86,6 +86,7 @@ class RPhoneDesktopApp : Application() {
     private lateinit var serial: SerialConnection
     private lateinit var storage: FileStorage
     private lateinit var notification: PlatformNotification
+    private lateinit var waveIdManager: com.rphone.v3.desktop.managers.WaveIDManager
 
     private lateinit var pageHost: StackPane
     private lateinit var deviceCombo: ComboBox<SerialDevice>
@@ -266,6 +267,7 @@ class RPhoneDesktopApp : Application() {
         serial = PlatformProvider.getSerialConnection()
         storage = PlatformProvider.getFileStorage()
         notification = PlatformProvider.getNotification()
+        waveIdManager = com.rphone.v3.desktop.managers.WaveIDManager()
 
         val root = BorderPane().apply {
             style = "-fx-background-color: linear-gradient(to bottom right, #050810, #070D18);"
@@ -2158,85 +2160,64 @@ class RPhoneDesktopApp : Application() {
 
     private fun loadWaveFiles() {
         scope.launch {
-            val entries = loadWaveIndex().ifEmpty { rebuildWaveIndexFromStorage() }
-            if (entries.isNotEmpty()) {
-                saveWaveIndex(entries)
-            }
-            val filteredEntries = if (waveModeFilter == "ALL") entries else entries.filter { it.mode.equals(waveModeFilter, true) }
-            val files = if (filteredEntries.isNotEmpty()) {
-                filteredEntries.sortedByDescending { it.createdAtMs }.map { formatWaveEntry(it) }
-            } else {
-                storage.listFiles().filter { it.endsWith(".rphp", true) }.sortedDescending()
+            val profiles = waveIdManager.getProfilesByMode(waveModeFilter.ifEmpty { "USB" })
+            val filteredCount = profiles.size
+            val displayLines = profiles.sortedByDescending { it.tanggal }.map { profil ->
+                "${profil.brand} ${profil.model} | ${profil.kondisi} | ${profil.tanggal?.take(10) ?: "N/A"}"
             }
             withContext(Dispatchers.Main) {
-                waveHistoryList.items.setAll(files)
-                waveDbCountLabel.text = if (filteredEntries.isNotEmpty()) filteredEntries.size.toString() else files.count { it.endsWith(".rphp", true) }.toString()
-                settingsStatus.text = "Loaded ${files.size} wave profiles"
+                waveHistoryList.items.setAll(displayLines)
+                waveDbCountLabel.text = filteredCount.toString()
+                settingsStatus.text = "Loaded $filteredCount wave profiles from database"
             }
         }
     }
 
     private fun compareLatestWaveProfiles() {
         scope.launch {
-            val waveFiles = storage.listFiles()
-                .filter { it.endsWith(".rphp", true) }
-                .sortedDescending()
-            val indexEntries = loadWaveIndex().ifEmpty { rebuildWaveIndexFromStorage() }
-            val orderedWaveFiles = if (indexEntries.isNotEmpty()) {
-                val modeScoped = if (waveModeFilter == "ALL") indexEntries else indexEntries.filter { it.mode.equals(waveModeFilter, true) }
-                modeScoped.map { it.filename }.filter { it.endsWith(".rphp", true) }.distinct()
-            } else {
-                waveFiles
-            }
-
-            if (orderedWaveFiles.size < 2) {
+            val profiles = waveIdManager.getProfilesByMode(waveModeFilter.ifEmpty { "USB" })
+            if (profiles.size < 2) {
                 withContext(Dispatchers.Main) {
-                    notification.showError("Butuh minimal 2 file .rphp untuk compare")
-                    waveHistoryList.items.setAll(orderedWaveFiles)
+                    notification.showError("Butuh minimal 2 profil untuk compare")
                 }
                 return@launch
             }
 
-            val queryFile = orderedWaveFiles[0]
-            val queryData = storage.load(queryFile).orEmpty()
-            val querySamples = extractWaveSamples(queryData)
-
-            if (querySamples.isEmpty()) {
+            val queryProfile = profiles.first()
+            val queryWaveform = queryProfile.getWaveformArray()
+            if (queryWaveform.isEmpty()) {
                 withContext(Dispatchers.Main) {
-                    notification.showError("Data numerik tidak ditemukan untuk compare")
+                    notification.showError("Profil query tidak memiliki data waveform")
                 }
                 return@launch
             }
 
-            val scoredMatches = orderedWaveFiles.drop(1).mapNotNull { candidateFile ->
-                val candidateData = storage.load(candidateFile).orEmpty()
-                val candidateSamples = extractWaveSamples(candidateData)
-                if (candidateSamples.isEmpty()) return@mapNotNull null
+            val referenceProfiles = profiles.drop(1)
+            val matches = waveIdManager.compareWaveforms(
+                queryWaveform,
+                queryProfile.puncakArus,
+                queryProfile.rataArus,
+                referenceProfiles
+            )
 
-                val score = waveSimilarity(querySamples, candidateSamples)
-                WaveMatch(candidateFile, score, candidateSamples.size)
-            }.sortedByDescending { it.score }
-
-            if (scoredMatches.isEmpty()) {
-                withContext(Dispatchers.Main) {
-                    notification.showError("Data referensi tidak cukup untuk compare")
-                }
-                return@launch
-            }
-
-            val bestMatches = scoredMatches.take(5)
+            val bestMatches = matches.take(5)
+            val diagnosis = waveIdManager.generateDiagnosis(bestMatches, 75.0)
 
             withContext(Dispatchers.Main) {
                 waveHistoryList.items.setAll(
                     buildList {
-                        add("COMPARE RESULT")
-                        add("Query: $queryFile")
+                        add("WAVEID COMPARISON RESULT")
+                        add("Query: ${queryProfile.brand} ${queryProfile.model}")
+                        add("")
                         bestMatches.forEachIndexed { index, match ->
-                            add("${index + 1}. ${match.fileName} | ${formatNumber(match.score, 1)}% | ${match.sampleCount} samples")
+                            add("${index + 1}. Similarity: ${formatNumber(match.similarity, 1)}%")
+                            add("  ${match.brand} ${match.model} - ${match.kondisi}")
                         }
+                        add("")
+                        add("DIAGNOSIS: $diagnosis")
                     }
                 )
-                notification.showSuccess("Compare selesai: ${formatNumber(bestMatches.first().score, 1)}% cocok tertinggi")
+                notification.showSuccess("DTW Comparison selesai: ${formatNumber(bestMatches.firstOrNull()?.similarity ?: 0.0, 1)}% cocok")
             }
         }
     }

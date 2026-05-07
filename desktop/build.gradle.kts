@@ -34,6 +34,9 @@ dependencies {
     // Serial communication for Windows
     implementation("com.fazecast:jSerialComm:2.10.4")
     
+    // Database
+    implementation("org.xerial:sqlite-jdbc:3.43.0.0")
+    
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-javafx:1.7.3")
