@@ -73,6 +73,13 @@ class RPhoneDesktopApp : Application() {
         SETTINGS
     }
 
+    private enum class WaveChannel {
+        CURRENT,
+        VOLTAGE,
+        POWER,
+        ALL
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var serial: SerialConnection
     private lateinit var storage: FileStorage
@@ -135,6 +142,8 @@ class RPhoneDesktopApp : Application() {
     private var psuPwmDurationMs = 2000
     private var psuOcpStatus = "OFF"
     private val waveIndexFileName = "wave_profiles_index.json"
+    private val usbWaveState = DesktopWaveformState()
+    private val psuWaveState = DesktopWaveformState()
 
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
 
@@ -150,6 +159,53 @@ class RPhoneDesktopApp : Application() {
     private val purple = Color.web("#A78BFA")
     private val red = Color.web("#EF4444")
     private val amber = Color.web("#F59E0B")
+
+    private data class DesktopWaveformState(
+        var activeChannel: WaveChannel = WaveChannel.CURRENT,
+        val currentBuf: ArrayDeque<Double> = ArrayDeque(300),
+        val voltageBuf: ArrayDeque<Double> = ArrayDeque(300),
+        val powerBuf: ArrayDeque<Double> = ArrayDeque(300),
+        var peakCurrent: Double = 0.0,
+        var avgCurrent: Double = 0.0,
+        var minCurrent: Double = 0.0,
+        private var rawMin: Double = Double.POSITIVE_INFINITY
+    ) {
+        private fun addToBuffer(buffer: ArrayDeque<Double>, value: Double, maxSize: Int = 300) {
+            if (buffer.size >= maxSize) {
+                buffer.removeFirst()
+            }
+            buffer.addLast(value)
+        }
+
+        fun addSample(current: Double, voltage: Double, power: Double) {
+            addToBuffer(currentBuf, current)
+            addToBuffer(voltageBuf, voltage)
+            addToBuffer(powerBuf, power)
+            if (current > peakCurrent) peakCurrent = current
+            if (current < rawMin) rawMin = current
+            minCurrent = if (rawMin.isFinite()) rawMin else 0.0
+            avgCurrent = if (currentBuf.isNotEmpty()) currentBuf.average() else 0.0
+        }
+
+        fun reset() {
+            currentBuf.clear()
+            voltageBuf.clear()
+            powerBuf.clear()
+            peakCurrent = 0.0
+            avgCurrent = 0.0
+            minCurrent = 0.0
+            rawMin = Double.POSITIVE_INFINITY
+        }
+
+        fun bufferFor(channel: WaveChannel): List<Double> {
+            return when (channel) {
+                WaveChannel.CURRENT -> currentBuf.toList()
+                WaveChannel.VOLTAGE -> voltageBuf.toList()
+                WaveChannel.POWER -> powerBuf.toList()
+                WaveChannel.ALL -> currentBuf.toList()
+            }
+        }
+    }
 
     override fun start(stage: Stage) {
         PlatformProvider.initialize(
@@ -331,8 +387,8 @@ class RPhoneDesktopApp : Application() {
         usbDeviceCountLabel = label("0 device", muted, 10.0, false)
 
         usbChartCanvas = Canvas(900.0, 420.0)
-        usbChartCanvas.widthProperty().addListener { _, _, _ -> drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan) }
-        usbChartCanvas.heightProperty().addListener { _, _, _ -> drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan) }
+        usbChartCanvas.widthProperty().addListener { _, _, _ -> drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan, usbWaveState) }
+        usbChartCanvas.heightProperty().addListener { _, _, _ -> drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan, usbWaveState) }
 
         val header = pageHeader("USB MODE", cyan, "SET_MODE_USB")
         val metrics = GridPane().apply {
@@ -351,7 +407,7 @@ class RPhoneDesktopApp : Application() {
             add(metricCard("D-", usbMetricDm, "V"), 1, 3)
         }
 
-        val tabs = tabBar(cyan, listOf("ARUS", "VOLT", "DAYA", "ALL"))
+        val tabs = waveTabRow(usbWaveState, cyan, usbChartCanvas)
         val chartCard = card("WAVEFORM", VBox(8.0).apply {
             children.addAll(tabs, chartPanel(usbChartCanvas), chartFooter(cyan))
         }).apply {
@@ -370,6 +426,8 @@ class RPhoneDesktopApp : Application() {
                 },
                 secondaryActionButton("RESET DATA", purple) {
                     sendCommands("BUZZ_RESET_WAVE")
+                    usbWaveState.reset()
+                    drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan, usbWaveState)
                 },
                 label("USB analysis shell follows the APK workflow.", textSecondary, 10.0, false)
             )
@@ -406,8 +464,8 @@ class RPhoneDesktopApp : Application() {
         psuMetricOcp = metricValue("OFF", red)
 
         psuChartCanvas = Canvas(900.0, 420.0)
-        psuChartCanvas.widthProperty().addListener { _, _, _ -> drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple) }
-        psuChartCanvas.heightProperty().addListener { _, _, _ -> drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple) }
+        psuChartCanvas.widthProperty().addListener { _, _, _ -> drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple, psuWaveState) }
+        psuChartCanvas.heightProperty().addListener { _, _, _ -> drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple, psuWaveState) }
 
         psuPwmButton = Button("PWM OFF").apply {
             style = buttonStyle(textSecondary, "#111827", "#64748B")
@@ -486,7 +544,7 @@ class RPhoneDesktopApp : Application() {
 
         val rightColumn = card("WAVEFORM", VBox(8.0).apply {
             children.addAll(
-                tabBar(purple, listOf("ARUS", "VOLT", "DAYA", "ALL")),
+                waveTabRow(psuWaveState, purple, psuChartCanvas),
                 chartPanel(psuChartCanvas),
                 label("Live waveform from PSU analysis", textSecondary, 10.0, false),
                 chartFooter(purple)
@@ -899,6 +957,32 @@ class RPhoneDesktopApp : Application() {
         }
     }
 
+    private fun waveTabRow(state: DesktopWaveformState, accent: Color, canvas: Canvas): Node {
+        return HBox(6.0).apply {
+            children.addAll(
+                listOf(
+                    WaveChannel.CURRENT to "ARUS",
+                    WaveChannel.VOLTAGE to "VOLT",
+                    WaveChannel.POWER to "DAYA",
+                    WaveChannel.ALL to "ALL"
+                ).map { (channel, text) ->
+                    ToggleButton(text).apply {
+                        isSelected = state.activeChannel == channel
+                        style = tabStyle(accent, isSelected)
+                        selectedProperty().addListener { _, _, selected ->
+                            style = tabStyle(accent, selected)
+                        }
+                        setOnAction {
+                            state.activeChannel = channel
+                            canvas.graphicsContext2D.clearRect(0.0, 0.0, canvas.width, canvas.height)
+                            drawWaveform(canvas.graphicsContext2D, canvas.width, canvas.height, accent, state)
+                        }
+                    }
+                }
+            )
+        }
+    }
+
     private fun chartPanel(canvas: Canvas): Node {
         val wrapper = StackPane(canvas).apply {
             prefHeight = 320.0
@@ -915,7 +999,8 @@ class RPhoneDesktopApp : Application() {
         wrapper.addEventHandler(MouseEvent.MOUSE_CLICKED) { it.consume() }
         Platform.runLater {
             val accent = if (canvas == psuChartCanvas) purple else cyan
-            drawWaveform(canvas.graphicsContext2D, canvas.width, canvas.height, accent)
+            val state = if (canvas == psuChartCanvas) psuWaveState else usbWaveState
+            drawWaveform(canvas.graphicsContext2D, canvas.width, canvas.height, accent, state)
         }
         return wrapper
     }
@@ -1285,6 +1370,8 @@ class RPhoneDesktopApp : Application() {
                         usbMetricCapacity.text = if (usbCapacityAccum <= 0.0) "--" else formatNumber(usbCapacityAccum, 1)
                         usbMetricCharge.text = usbLastStableCharge
                         usbMetricOcp.text = if (ocpEnabled) "ON" else "OFF"
+                        usbWaveState.addSample(curr, volt, volt * curr)
+                        drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan, usbWaveState)
                     } else if (mode == "PSU") {
                         val volt = extractDoubleFromJson("volt") ?: 0.0
                         val curr = extractDoubleFromJson("curr") ?: 0.0
@@ -1314,6 +1401,8 @@ class RPhoneDesktopApp : Application() {
                             "ON" -> "OCP ON"
                             else -> "OCP OFF"
                         }
+                        psuWaveState.addSample(curr, volt, volt * curr)
+                        drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple, psuWaveState)
                     } else if (jsonText.contains("\"probe\"")) {
                         val probeMode = extractStringFromJson("probe") ?: "VOLT"
                         if (probeMode.equals("SETTLING", ignoreCase = true)) {
@@ -1981,48 +2070,132 @@ class RPhoneDesktopApp : Application() {
     }
 
     private fun drawWaveform(gc: GraphicsContext, width: Double, height: Double, accent: Color) {
+        drawWaveform(gc, width, height, accent, usbWaveState)
+    }
+
+    private fun drawWaveform(gc: GraphicsContext, width: Double, height: Double, accent: Color, state: DesktopWaveformState) {
         if (width <= 2.0 || height <= 2.0) return
-        gc.fill = background
-        gc.fillRect(0.0, 0.0, width, height)
+
+        val waveLeft = 52.0
+        val waveW = (width - waveLeft).coerceAtLeast(1.0)
+        val waveH = height.toDouble()
+        val topPad = waveH * 0.05
+        val drawH = waveH - topPad * 2.0
+
+        fun clear() {
+            gc.fill = background
+            gc.fillRect(0.0, 0.0, width, height)
+        }
+
+        fun formatLabel(value: Double): String = when {
+            value >= 10.0 -> String.format("%.0f", value)
+            value >= 1.0 -> String.format("%.1f", value)
+            else -> String.format("%.2f", value)
+        }
+
+        fun bufferFor(channel: WaveChannel): List<Double> = state.bufferFor(channel)
+
+        fun ceilingFor(channel: WaveChannel): Double {
+            val maxVal = when (channel) {
+                WaveChannel.CURRENT -> state.currentBuf.maxOrNull() ?: 0.0
+                WaveChannel.VOLTAGE -> state.voltageBuf.maxOrNull() ?: 0.0
+                WaveChannel.POWER -> state.powerBuf.maxOrNull() ?: 0.0
+                WaveChannel.ALL -> listOf(
+                    state.currentBuf.maxOrNull() ?: 0.0,
+                    state.voltageBuf.maxOrNull() ?: 0.0,
+                    state.powerBuf.maxOrNull() ?: 0.0
+                ).maxOrNull() ?: 0.0
+            }
+            return (maxVal.coerceAtLeast(0.001)) * 1.2
+        }
+
+        fun valueToY(value: Double, ceiling: Double): Double {
+            val ratio = (value / ceiling).coerceIn(0.0, 1.0)
+            return topPad + (1.0 - ratio) * drawH
+        }
+
+        clear()
+
         gc.stroke = border
         gc.lineWidth = 1.0
-        val padding = 18.0
-        val usableWidth = width - padding * 2
-        val usableHeight = height - padding * 2
         for (i in 0..10) {
-            val y = padding + (usableHeight / 10.0) * i
-            gc.strokeLine(padding, y, width - padding, y)
+            val y = topPad + (drawH / 10.0) * i
+            gc.strokeLine(waveLeft, y, width - 18.0, y)
         }
         for (i in 0..12) {
-            val x = padding + (usableWidth / 12.0) * i
-            gc.strokeLine(x, padding, x, height - padding)
+            val x = waveLeft + ((waveW - 18.0) / 12.0) * i
+            gc.strokeLine(x, topPad, x, height - topPad)
         }
-        // If there's no serial data yet, show a flat baseline near the bottom
-        val hasData = receiveBuffer.isNotEmpty() || lastKnownValue != 0.0
-        val baseY = if (hasData) height * 0.72 else (height - padding - 6.0)
 
-        gc.stroke = accent
-        gc.lineWidth = 3.0
-        if (hasData) {
-            gc.beginPath()
-            for (i in 0..160) {
-                val x = padding + usableWidth * (i / 160.0)
-                val wave = kotlin.math.sin(i / 12.0) * 16.0 + kotlin.math.cos(i / 4.5) * 7.0
-                val y = (baseY - wave).coerceIn(padding, height - padding)
-                if (i == 0) gc.moveTo(x, y) else gc.lineTo(x, y)
-            }
-            gc.stroke()
+        val channel = state.activeChannel
+        val ceiling = ceilingFor(channel)
+        val maxData = when (channel) {
+            WaveChannel.CURRENT -> state.currentBuf.size
+            WaveChannel.VOLTAGE -> state.voltageBuf.size
+            WaveChannel.POWER -> state.powerBuf.size
+            WaveChannel.ALL -> state.currentBuf.size
+        }
+
+        gc.stroke = border
+        gc.strokeLine(waveLeft, 0.0, waveLeft, height)
+
+        if (maxData < 2) {
+            val baseY = height - topPad - 4.0
             gc.stroke = accent
-            gc.lineWidth = 2.0
-            gc.strokeLine(padding, baseY, width - padding, baseY)
-            gc.stroke = purple
-            gc.lineWidth = 1.2
-            gc.strokeLine(padding, height * 0.45, width - padding, height * 0.45)
-        } else {
-            // idle -> draw a subtle baseline at the bottom
-            gc.globalAlpha = 0.9
-            gc.strokeLine(padding, baseY, width - padding, baseY)
-            gc.globalAlpha = 1.0
+            gc.lineWidth = 2.5
+            gc.strokeLine(waveLeft, baseY, width - 18.0, baseY)
+            return
+        }
+
+        fun drawSeries(buffer: List<Double>, color: Color, drawStats: Boolean, peak: Double, avg: Double) {
+            if (buffer.size < 2) {
+                val baseY = height - topPad - 4.0
+                gc.stroke = color
+                gc.lineWidth = 2.0
+                gc.strokeLine(waveLeft, baseY, width - 18.0, baseY)
+                return
+            }
+
+            val stepX = waveW / (buffer.size - 1).toDouble()
+            val baselineY = height - topPad - 4.0
+
+            gc.beginPath()
+            val firstY = valueToY(buffer[0], ceiling)
+            gc.moveTo(waveLeft, firstY)
+            for (i in 1 until buffer.size) {
+                val x = waveLeft + i * stepX
+                val y = valueToY(buffer[i], ceiling)
+                gc.lineTo(x, y)
+            }
+
+            gc.stroke = color
+            gc.lineWidth = 3.0
+            gc.stroke()
+
+            if (drawStats) {
+                gc.stroke = color
+                gc.lineWidth = 2.0
+                gc.strokeLine(waveLeft, baselineY, width - 18.0, baselineY)
+                val peakY = valueToY(peak, ceiling)
+                val avgY = valueToY(avg, ceiling)
+                gc.stroke = purple
+                gc.lineWidth = 1.2
+                gc.strokeLine(waveLeft, avgY, width - 18.0, avgY)
+                gc.stroke = red
+                gc.lineWidth = 1.2
+                gc.strokeLine(waveLeft, peakY, width - 18.0, peakY)
+            }
+        }
+
+        when (channel) {
+            WaveChannel.CURRENT -> drawSeries(state.currentBuf.toList(), accent, true, state.peakCurrent, state.avgCurrent)
+            WaveChannel.VOLTAGE -> drawSeries(state.voltageBuf.toList(), accent, false, 0.0, 0.0)
+            WaveChannel.POWER -> drawSeries(state.powerBuf.toList(), accent, false, 0.0, 0.0)
+            WaveChannel.ALL -> {
+                drawSeries(state.powerBuf.toList(), purple, false, 0.0, 0.0)
+                drawSeries(state.voltageBuf.toList(), green, false, 0.0, 0.0)
+                drawSeries(state.currentBuf.toList(), accent, true, state.peakCurrent, state.avgCurrent)
+            }
         }
     }
 
