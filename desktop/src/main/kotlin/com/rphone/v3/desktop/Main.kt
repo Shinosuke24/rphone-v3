@@ -134,6 +134,7 @@ class RPhoneDesktopApp : Application() {
     private var psuPwmEnabled = false
     private var psuPwmDurationMs = 2000
     private var psuOcpStatus = "OFF"
+    private val waveIndexFileName = "wave_profiles_index.json"
 
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
 
@@ -1464,6 +1465,130 @@ class RPhoneDesktopApp : Application() {
         }
     }
 
+    private fun formatWaveEntry(entry: WaveIndexEntry): String {
+        val modeTag = if (entry.mode.isBlank()) "PSU" else entry.mode
+        return "${entry.label} | $modeTag | ${entry.filename}"
+    }
+
+    private fun escapeJson(text: String): String {
+        return text
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+    }
+
+    private fun extractJsonField(text: String, key: String): String? {
+        val pattern = Regex("\"$key\"\\s*:\\s*\"((?:[^\\\"]|\\\\.)*)\"")
+        return pattern.find(text)?.groups?.get(1)?.value
+            ?.replace("\\n", "\n")
+            ?.replace("\\r", "\r")
+            ?.replace("\\\"", "\"")
+            ?.replace("\\\\", "\\")
+    }
+
+    private fun extractJsonLongField(text: String, key: String): Long? {
+        val pattern = Regex("\"$key\"\\s*:\\s*(-?\\d+)")
+        return pattern.find(text)?.groups?.get(1)?.value?.toLongOrNull()
+    }
+
+    private suspend fun loadWaveIndex(): List<WaveIndexEntry> {
+        val raw = storage.load(waveIndexFileName).orEmpty()
+        if (raw.isBlank()) return emptyList()
+
+        return try {
+            buildList {
+                Regex("\\{[^{}]*\\}")
+                    .findAll(raw)
+                    .forEach { match ->
+                        val objText = match.value
+                        val filename = extractJsonField(objText, "filename").orEmpty()
+                        if (filename.isBlank()) return@forEach
+                        add(
+                            WaveIndexEntry(
+                                filename = filename,
+                                label = extractJsonField(objText, "label") ?: filename.removeSuffix(".rphp"),
+                                mode = extractJsonField(objText, "mode") ?: "PSU",
+                                source = extractJsonField(objText, "source") ?: "local",
+                                createdAtMs = extractJsonLongField(objText, "createdAtMs") ?: 0L,
+                                sizeBytes = extractJsonLongField(objText, "sizeBytes") ?: 0L
+                            )
+                        )
+                    }
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private suspend fun saveWaveIndex(entries: List<WaveIndexEntry>): Boolean {
+        val payload = buildString {
+            append("[")
+            entries.sortedByDescending { it.createdAtMs }.forEachIndexed { index, entry ->
+                if (index > 0) append(",")
+                append("{")
+                append("\"filename\":\"").append(escapeJson(entry.filename)).append("\",")
+                append("\"label\":\"").append(escapeJson(entry.label)).append("\",")
+                append("\"mode\":\"").append(escapeJson(entry.mode)).append("\",")
+                append("\"source\":\"").append(escapeJson(entry.source)).append("\",")
+                append("\"createdAtMs\":").append(entry.createdAtMs).append(",")
+                append("\"sizeBytes\":").append(entry.sizeBytes)
+                append("}")
+            }
+            append("]")
+        }
+        return storage.save(waveIndexFileName, payload)
+    }
+
+    private suspend fun rebuildWaveIndexFromStorage(): List<WaveIndexEntry> {
+        val files = storage.listFiles().filter { it.endsWith(".rphp", true) }
+        return files.mapIndexed { index, filename ->
+            WaveIndexEntry(
+                filename = filename,
+                label = filename.removeSuffix(".rphp"),
+                mode = "PSU",
+                source = "local",
+                createdAtMs = System.currentTimeMillis() - index,
+                sizeBytes = storage.getFileSize(filename).coerceAtLeast(0L)
+            )
+        }
+    }
+
+    private fun upsertWaveIndex(
+        filename: String,
+        label: String,
+        mode: String,
+        source: String,
+        sizeBytes: Long
+    ) {
+        scope.launch {
+            val current = loadWaveIndex().toMutableList()
+            val existingIndex = current.indexOfFirst { it.filename == filename }
+            val createdAtMs = if (existingIndex >= 0 && current[existingIndex].createdAtMs > 0L) {
+                current[existingIndex].createdAtMs
+            } else {
+                System.currentTimeMillis()
+            }
+            val entry = WaveIndexEntry(
+                filename = filename,
+                label = label,
+                mode = mode,
+                source = source,
+                createdAtMs = createdAtMs,
+                sizeBytes = sizeBytes
+            )
+            if (existingIndex >= 0) {
+                current[existingIndex] = entry
+            } else {
+                current.add(entry)
+            }
+            saveWaveIndex(current)
+            withContext(Dispatchers.Main) {
+                refreshWaveHistory()
+            }
+        }
+    }
+
     private fun exportWaveLog() {
         scope.launch {
             val filename = "waveid-export-${LocalTime.now().format(DateTimeFormatter.ofPattern("HHmmss"))}.txt"
@@ -1498,7 +1623,16 @@ class RPhoneDesktopApp : Application() {
                 try {
                     val content = f.readText()
                     val ok = storage.save(f.name, content)
-                    if (ok) imported++
+                    if (ok) {
+                        imported++
+                        upsertWaveIndex(
+                            filename = f.name,
+                            label = f.name.removeSuffix(".rphp"),
+                            mode = "PSU",
+                            source = "import",
+                            sizeBytes = content.toByteArray(Charsets.UTF_8).size.toLong()
+                        )
+                    }
                 } catch (e: Exception) {
                     // ignore individual failures
                 }
@@ -1545,11 +1679,19 @@ class RPhoneDesktopApp : Application() {
 
     private fun loadWaveFiles() {
         scope.launch {
-            val files = storage.listFiles()
+            val entries = loadWaveIndex().ifEmpty { rebuildWaveIndexFromStorage() }
+            if (entries.isNotEmpty()) {
+                saveWaveIndex(entries)
+            }
+            val files = if (entries.isNotEmpty()) {
+                entries.sortedByDescending { it.createdAtMs }.map { formatWaveEntry(it) }
+            } else {
+                storage.listFiles().filter { it.endsWith(".rphp", true) }.sortedDescending()
+            }
             withContext(Dispatchers.Main) {
                 waveHistoryList.items.setAll(files)
-                waveDbCountLabel.text = files.count { it.endsWith(".rphp", true) }.toString()
-                settingsStatus.text = "Loaded ${files.size} files from storage"
+                waveDbCountLabel.text = if (entries.isNotEmpty()) entries.size.toString() else files.count { it.endsWith(".rphp", true) }.toString()
+                settingsStatus.text = "Loaded ${files.size} wave profiles"
             }
         }
     }
@@ -1559,16 +1701,22 @@ class RPhoneDesktopApp : Application() {
             val waveFiles = storage.listFiles()
                 .filter { it.endsWith(".rphp", true) }
                 .sortedDescending()
+            val indexEntries = loadWaveIndex().ifEmpty { rebuildWaveIndexFromStorage() }
+            val orderedWaveFiles = if (indexEntries.isNotEmpty()) {
+                indexEntries.map { it.filename }.filter { it.endsWith(".rphp", true) }.distinct()
+            } else {
+                waveFiles
+            }
 
-            if (waveFiles.size < 2) {
+            if (orderedWaveFiles.size < 2) {
                 withContext(Dispatchers.Main) {
                     notification.showError("Butuh minimal 2 file .rphp untuk compare")
-                    waveHistoryList.items.setAll(waveFiles)
+                    waveHistoryList.items.setAll(orderedWaveFiles)
                 }
                 return@launch
             }
 
-            val queryFile = waveFiles[0]
+            val queryFile = orderedWaveFiles[0]
             val queryData = storage.load(queryFile).orEmpty()
             val querySamples = extractWaveSamples(queryData)
 
@@ -1579,7 +1727,7 @@ class RPhoneDesktopApp : Application() {
                 return@launch
             }
 
-            val scoredMatches = waveFiles.drop(1).mapNotNull { candidateFile ->
+            val scoredMatches = orderedWaveFiles.drop(1).mapNotNull { candidateFile ->
                 val candidateData = storage.load(candidateFile).orEmpty()
                 val candidateSamples = extractWaveSamples(candidateData)
                 if (candidateSamples.isEmpty()) return@mapNotNull null
@@ -1653,6 +1801,15 @@ class RPhoneDesktopApp : Application() {
     }
 
     private data class WaveMatch(val fileName: String, val score: Double, val sampleCount: Int)
+
+    private data class WaveIndexEntry(
+        val filename: String,
+        val label: String,
+        val mode: String,
+        val source: String,
+        val createdAtMs: Long,
+        val sizeBytes: Long
+    )
 
     private fun extractWaveSamples(text: String): List<Double> {
         val jsonWave = Regex("\"waveformJson\"\\s*:\\s*\"([^\"]+)\"", RegexOption.IGNORE_CASE)
@@ -1757,11 +1914,28 @@ class RPhoneDesktopApp : Application() {
             val files = storage.listFiles()
             withContext(Dispatchers.Main) {
                 uartFileList.items.setAll(files)
-                waveHistoryList.items.setAll(files)
-                waveDbCountLabel.text = files.count { it.endsWith(".rphp", true) }.toString()
             }
         }
         refreshProbeHistory()
+        refreshWaveHistory()
+    }
+
+    private fun refreshWaveHistory() {
+        scope.launch {
+            val entries = loadWaveIndex().ifEmpty { rebuildWaveIndexFromStorage() }
+            if (entries.isNotEmpty()) {
+                saveWaveIndex(entries)
+            }
+            val labels = if (entries.isNotEmpty()) {
+                entries.sortedByDescending { it.createdAtMs }.map { formatWaveEntry(it) }
+            } else {
+                storage.listFiles().filter { it.endsWith(".rphp", true) }.sortedDescending()
+            }
+            withContext(Dispatchers.Main) {
+                waveHistoryList.items.setAll(labels)
+                waveDbCountLabel.text = entries.size.toString()
+            }
+        }
     }
 
     private fun recordWaveProfile() {
@@ -1781,6 +1955,13 @@ class RPhoneDesktopApp : Application() {
                 if (ok) {
                     sendCommand("BUZZ_REKAM_SELESAI")
                     notification.showSuccess("Profile tersimpan: $filename")
+                    upsertWaveIndex(
+                        filename = filename,
+                        label = filename.removeSuffix(".rphp"),
+                        mode = "PSU",
+                        source = "local",
+                        sizeBytes = data.toByteArray(Charsets.UTF_8).size.toLong()
+                    )
                     refreshFileLists()
                 } else {
                     notification.showError("Gagal menyimpan profile")
