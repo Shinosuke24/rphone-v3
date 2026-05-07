@@ -18,6 +18,7 @@ class DesktopSerialConnection : SerialConnection {
     private var serialPort: SerialPort? = null
     private val receiveFlow = MutableSharedFlow<ByteArray>()
     private val executor = Executors.newSingleThreadExecutor()
+    private val readBuffer = StringBuilder()
     
     override suspend fun connect(devicePath: String): Boolean {
         return try {
@@ -49,6 +50,7 @@ class DesktopSerialConnection : SerialConnection {
         return try {
             serialPort?.closePort()
             serialPort = null
+            readBuffer.clear()
             logger.info("Disconnected")
             true
         } catch (e: Exception) {
@@ -96,14 +98,23 @@ class DesktopSerialConnection : SerialConnection {
                 try {
                     val bytesRead = serialPort?.readBytes(buffer, buffer.size)
                     if (bytesRead != null && bytesRead > 0) {
-                        val data = buffer.copyOf(bytesRead)
-                        // Emit to flow
-                        try {
-                            kotlinx.coroutines.runBlocking {
-                                receiveFlow.emit(data)
+                        val chunk = String(buffer, 0, bytesRead, Charsets.UTF_8)
+                        readBuffer.append(chunk)
+                        var newlineIndex = readBuffer.indexOf("\n")
+                        while (newlineIndex >= 0) {
+                            val line = readBuffer.substring(0, newlineIndex).trim()
+                            readBuffer.delete(0, newlineIndex + 1)
+                            if (line.isNotBlank()) {
+                                val data = line.toByteArray(Charsets.UTF_8)
+                                try {
+                                    kotlinx.coroutines.runBlocking {
+                                        receiveFlow.emit(data)
+                                    }
+                                } catch (e: Exception) {
+                                    logger.error("Error emitting data", e)
+                                }
                             }
-                        } catch (e: Exception) {
-                            logger.error("Error emitting data", e)
+                            newlineIndex = readBuffer.indexOf("\n")
                         }
                     }
                 } catch (e: Exception) {

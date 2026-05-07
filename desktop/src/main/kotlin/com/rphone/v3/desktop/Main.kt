@@ -117,6 +117,8 @@ class RPhoneDesktopApp : Application() {
     private var connectedDevice: SerialDevice? = null
     private var lastKnownValue = 0.0
     private var lastSavedRecord = ""
+    private var usbCapacityAccum = 0.0
+    private var usbLastUpdateMs = 0L
 
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
 
@@ -310,7 +312,10 @@ class RPhoneDesktopApp : Application() {
         val tabs = tabBar(cyan, listOf("ARUS", "VOLT", "DAYA", "ALL"))
         val chartCard = card("Measurement Results", VBox(8.0).apply {
             children.addAll(tabs, chartPanel(usbChartCanvas), chartFooter(cyan))
-        })
+        }).apply {
+            prefWidth = 720.0
+            maxWidth = Double.MAX_VALUE
+        }
 
         val actionPanel = card("Quick Action", VBox(8.0).apply {
             children.addAll(
@@ -328,7 +333,7 @@ class RPhoneDesktopApp : Application() {
         })
 
         val leftColumn = VBox(10.0).apply {
-            prefWidth = 360.0
+            prefWidth = 430.0
             children.addAll(
                 connectionCard("USB DEVICE", cyan),
                 card("USB Metrics", metrics),
@@ -1082,11 +1087,11 @@ class RPhoneDesktopApp : Application() {
                 try {
                     // helper extractors for key values from the jsonText
                     fun extractStringFromJson(key: String): String? {
-                        val r = Regex("\"${'$'}key\"\\s*:\\s*\\\"([^\\\"]*)\\\"")
+                        val r = Regex("\"$key\"\\s*:\\s*\"([^\"]*)\"")
                         return r.find(jsonText)?.groups?.get(1)?.value
                     }
                     fun extractDoubleFromJson(key: String): Double? {
-                        val r = Regex("\"${'$'}key\"\\s*:\\s*([-+]?[0-9]*\\.?[0-9]+)")
+                        val r = Regex("\"$key\"\\s*:\\s*([-+]?[0-9]*\\.?[0-9]+)")
                         return r.find(jsonText)?.groups?.get(1)?.value?.toDoubleOrNull()
                     }
 
@@ -1098,17 +1103,25 @@ class RPhoneDesktopApp : Application() {
                     appendConsole("RX_JSON", jsonText)
 
                     val mode = extractStringFromJson("mode")
-                    if (mode == "USB") {
+                    val isUsbPayload = mode == "USB" || (mode.isNullOrBlank() && jsonText.contains("\"volt\"") && jsonText.contains("\"curr\""))
+                    if (isUsbPayload) {
                         val volt = extractDoubleFromJson("volt") ?: lastKnownValue
                         val curr = extractDoubleFromJson("curr") ?: 0.0
                         val dp = extractDoubleFromJson("dp") ?: 0.0
                         val dm = extractDoubleFromJson("dm") ?: 0.0
                         lastKnownValue = curr
+                        val now = System.currentTimeMillis()
+                        if (usbLastUpdateMs > 0L) {
+                            val dtHours = (now - usbLastUpdateMs) / 3_600_000.0
+                            usbCapacityAccum += curr * 1000.0 * dtHours
+                        }
+                        usbLastUpdateMs = now
                         usbMetricVoltage.text = formatNumber(volt, 3)
                         usbMetricCurrent.text = formatNumber(curr, 3)
                         usbMetricDp.text = formatNumber(dp, 2)
                         usbMetricDm.text = formatNumber(dm, 2)
                         usbMetricPower.text = formatNumber(volt * curr, 2)
+                        usbMetricCapacity.text = if (usbCapacityAccum <= 0.0) "--" else formatNumber(usbCapacityAccum, 1)
                     } else if (mode == "PSU") {
                         val volt = extractDoubleFromJson("volt") ?: 0.0
                         val curr = extractDoubleFromJson("curr") ?: 0.0
