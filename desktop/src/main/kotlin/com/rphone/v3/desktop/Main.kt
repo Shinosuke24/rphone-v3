@@ -1330,6 +1330,12 @@ class RPhoneDesktopApp : Application() {
                                     probeOhmLabel.text = formatNumber(ohm, 1) + " Ω"
                                 }
                             }
+                            // auto-save or history item indicators from device
+                            val autoSave = extractBooleanFromJson("auto_save") ?: false
+                            val probeSavedFlag = extractBooleanFromJson("probe_saved") ?: false
+                            if (autoSave || probeSavedFlag) {
+                                saveProbeJsonSnapshot(jsonText, probeMode)
+                            }
                         }
                     } else if (jsonText.contains("\"boot_log_start\"") || jsonText.contains("\"boot_log_end\"")) {
                         // boot log markers — keep in buffer for WaveID import
@@ -1396,6 +1402,35 @@ class RPhoneDesktopApp : Application() {
         }
     }
 
+    private fun saveProbeJsonSnapshot(jsonText: String, mode: String) {
+        scope.launch {
+            try {
+                val modePrefix = when (mode.uppercase()) {
+                    "DIODE" -> "DIO"
+                    "OHM" -> "OHM"
+                    "VOLT" -> "VOL"
+                    else -> "VOL"
+                }
+                val filename = "probe-${modePrefix}-${LocalTime.now().format(DateTimeFormatter.ofPattern("HHmmss"))}.json"
+                val ok = storage.save(filename, jsonText)
+                withContext(Dispatchers.Main) {
+                    if (ok) {
+                        sendCommand("BUZZ_PROBE_SAVED")
+                        lastSavedRecord = filename
+                        notification.showSuccess("Probe snapshot tersimpan: $filename")
+                        refreshProbeHistory()
+                    } else {
+                        notification.showError("Gagal menyimpan snapshot probe")
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    appendConsole("PROBE_ERR", "Failed save probe json: ${e.message}")
+                }
+            }
+        }
+    }
+
     private fun isProbeTypePasif(mode: String): Boolean {
         return mode.equals("OHM", ignoreCase = true) || mode.equals("DIODA", ignoreCase = true)
     }
@@ -1407,10 +1442,11 @@ class RPhoneDesktopApp : Application() {
 
     private fun refreshProbeHistory() {
         scope.launch {
-            val allFiles = storage.listFiles().filter { it.startsWith("probe-") && it.endsWith(".txt") }
+            // include both .txt and .json probe snapshots
+            val allFiles = storage.listFiles().filter { it.startsWith("probe-") && (it.endsWith(".txt") || it.endsWith(".json")) }
             val filtered = when (probeCurrentFilter) {
-                "PASIF" -> allFiles.filter { it.contains("-OHM-") || it.contains("-DIO-") }
-                "AKTIF" -> allFiles.filter { it.contains("-VOL-") }
+                "PASIF" -> allFiles.filter { it.contains("-OHM-") || it.contains("-DIO-") || it.contains("-DIO") }
+                "AKTIF" -> allFiles.filter { it.contains("-VOL-") || it.contains("-TEG-") || it.contains("-VOL") }
                 else -> allFiles
             }
             withContext(Dispatchers.Main) {
