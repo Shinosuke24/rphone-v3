@@ -90,12 +90,15 @@ class RPhoneDesktopApp : Application() {
     private lateinit var usbMetricVoltage: Label
     private lateinit var usbMetricPower: Label
     private lateinit var usbMetricCapacity: Label
+    private lateinit var usbMetricCharge: Label
+    private lateinit var usbMetricOcp: Label
     private lateinit var usbMetricDp: Label
     private lateinit var usbMetricDm: Label
     private lateinit var psuMetricCurrent: Label
     private lateinit var psuMetricVoltage: Label
     private lateinit var psuMetricPower: Label
     private lateinit var psuMetricCapacity: Label
+    private lateinit var psuMetricOcp: Label
     private lateinit var probeValue: Label
     private lateinit var probeModeLabel: Label
     private lateinit var probeVoltageLabel: Label
@@ -119,6 +122,11 @@ class RPhoneDesktopApp : Application() {
     private var lastSavedRecord = ""
     private var usbCapacityAccum = 0.0
     private var usbLastUpdateMs = 0L
+    private val usbChargeVoteBuffer = ArrayDeque<String>(5)
+    private var usbLastStableCharge = "Standard Charging"
+    private var probeActiveMode = "VOLT"
+    private var probeSettlingUntilMs = 0L
+    private var probePollingJob: Job? = null
 
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
 
@@ -285,6 +293,8 @@ class RPhoneDesktopApp : Application() {
         usbMetricVoltage = metricValue("0.000", textPrimary)
         usbMetricPower = metricValue("0.00", cyan)
         usbMetricCapacity = metricValue("--", textSecondary)
+        usbMetricCharge = metricValue("Standard Charging", green)
+        usbMetricOcp = metricValue("ON", red)
         usbMetricDp = metricValue("0.00", cyan)
         usbMetricDm = metricValue("0.00", cyan)
 
@@ -305,8 +315,10 @@ class RPhoneDesktopApp : Application() {
             add(metricCard("TEGANGAN", usbMetricVoltage, "V"), 1, 0)
             add(metricCard("DAYA", usbMetricPower, "W"), 0, 1)
             add(metricCard("KAPASITAS", usbMetricCapacity, "mAh"), 1, 1)
-            add(metricCard("D+", usbMetricDp, "V"), 0, 2)
-            add(metricCard("D-", usbMetricDm, "V"), 1, 2)
+            add(metricCard("PROTOKOL", usbMetricCharge, ""), 0, 2)
+            add(metricCard("OCP", usbMetricOcp, ""), 1, 2)
+            add(metricCard("D+", usbMetricDp, "V"), 0, 3)
+            add(metricCard("D-", usbMetricDm, "V"), 1, 3)
         }
 
         val tabs = tabBar(cyan, listOf("ARUS", "VOLT", "DAYA", "ALL"))
@@ -314,7 +326,8 @@ class RPhoneDesktopApp : Application() {
             children.addAll(tabs, chartPanel(usbChartCanvas), chartFooter(cyan))
         }).apply {
             prefWidth = 720.0
-            maxWidth = Double.MAX_VALUE
+            minWidth = 720.0
+            maxWidth = 720.0
         }
 
         val actionPanel = card("Quick Action", VBox(8.0).apply {
@@ -334,6 +347,7 @@ class RPhoneDesktopApp : Application() {
 
         val leftColumn = VBox(10.0).apply {
             prefWidth = 430.0
+            maxWidth = 430.0
             children.addAll(
                 connectionCard("USB DEVICE", cyan),
                 card("USB Metrics", metrics),
@@ -359,6 +373,7 @@ class RPhoneDesktopApp : Application() {
         psuMetricVoltage = metricValue("0.000", textPrimary)
         psuMetricPower = metricValue("0.00", purple)
         psuMetricCapacity = metricValue("--", textSecondary)
+        psuMetricOcp = metricValue("OFF", red)
 
         psuChartCanvas = Canvas(900.0, 420.0)
         psuChartCanvas.widthProperty().addListener { _, _, _ -> drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple) }
@@ -398,7 +413,8 @@ class RPhoneDesktopApp : Application() {
                         Triple("ARUS", psuMetricCurrent, "A"),
                         Triple("TEGANGAN", psuMetricVoltage, "V"),
                         Triple("DAYA", psuMetricPower, "W"),
-                        Triple("KAPASITAS", psuMetricCapacity, "mAh")
+                        Triple("KAPASITAS", psuMetricCapacity, "mAh"),
+                        Triple("OCP", psuMetricOcp, "")
                     )
                 )),
                 settingsPanel,
@@ -416,11 +432,14 @@ class RPhoneDesktopApp : Application() {
                 chartPanel(psuChartCanvas),
                 chartFooter(purple)
             )
-        })
+        }).apply {
+            prefWidth = 720.0
+            minWidth = 720.0
+            maxWidth = 720.0
+        }
 
         val topSplit = HBox(10.0).apply {
             children.addAll(leftColumn, rightColumn)
-            HBox.setHgrow(rightColumn, Priority.ALWAYS)
         }
 
         return scrollPage(VBox(10.0).apply {
@@ -449,9 +468,9 @@ class RPhoneDesktopApp : Application() {
 
         val modeTabs = tabRow(
             listOf(
-                TabDef("VOLT", amber) { sendCommand("PROBE_MODE_VOLT") },
-                TabDef("DIODA", cyan) { sendCommand("PROBE_MODE_DIODE") },
-                TabDef("OHM", purple) { sendCommand("PROBE_MODE_OHM") }
+                TabDef("VOLT", amber) { switchProbeMode("VOLT") },
+                TabDef("DIODA", cyan) { switchProbeMode("DIODE") },
+                TabDef("OHM", purple) { switchProbeMode("OHM") }
             )
         )
 
@@ -756,10 +775,10 @@ class RPhoneDesktopApp : Application() {
     private fun metricCard(title: String, valueLabel: Label, unit: String): VBox {
         return card(title, VBox(2.0).apply {
             alignment = Pos.CENTER_LEFT
-            children.addAll(
-                valueLabel,
-                label(unit, muted, 11.0, false)
-            )
+            children.add(valueLabel)
+            if (unit.isNotBlank()) {
+                children.add(label(unit, muted, 11.0, false))
+            }
         }).apply {
             minHeight = 96.0
             maxWidth = Double.MAX_VALUE
@@ -914,6 +933,13 @@ class RPhoneDesktopApp : Application() {
     private fun selectPage(page: DesktopPage) {
         activePage = page
         pageHost.children.setAll(pageNodes.getValue(page))
+        if (page == DesktopPage.PROBE) {
+            if (serial.isConnected()) {
+                switchProbeMode(probeActiveMode)
+            }
+        } else {
+            stopProbePolling()
+        }
         navButtons.forEach { (navPage, button) ->
             val accent = if (navPage == page) {
                 when (navPage) {
@@ -1005,6 +1031,9 @@ class RPhoneDesktopApp : Application() {
                     startReceiveLoop()
                     appendConsole("SYSTEM", "Connected to ${device.name}")
                     sendCommand("SET_MODE_USB")
+                    if (activePage == DesktopPage.PROBE) {
+                        switchProbeMode(probeActiveMode)
+                    }
                 } else {
                     notification.showError("Gagal connect ke ${device.name}")
                 }
@@ -1059,6 +1088,63 @@ class RPhoneDesktopApp : Application() {
         }
     }
 
+    private fun switchProbeMode(mode: String) {
+        probeActiveMode = mode.uppercase()
+        probeSettlingUntilMs = System.currentTimeMillis() + probeCooldownMs(probeActiveMode)
+        probeModeLabel.text = when (probeActiveMode) {
+            "DIODE" -> "DIODA"
+            "OHM" -> "OHM"
+            else -> "TEGANGAN"
+        }
+        probeValue.text = "---"
+        probePollingJob?.cancel()
+        if (serial.isConnected()) {
+            sendCommand(probeRelayCommand(probeActiveMode))
+            startProbePolling()
+        }
+    }
+
+    private fun probeRelayCommand(mode: String): String {
+        return when (mode.uppercase()) {
+            "DIODE" -> "SET_PROBE_DIODE"
+            "OHM" -> "SET_PROBE_OHM"
+            else -> "SET_PROBE_VOLT"
+        }
+    }
+
+    private fun probePollCommand(mode: String): String {
+        return when (mode.uppercase()) {
+            "DIODE" -> "GET_DIODE"
+            "OHM" -> "GET_OHM"
+            else -> "GET_VOLT"
+        }
+    }
+
+    private fun probeCooldownMs(mode: String): Long {
+        return when (mode.uppercase()) {
+            "VOLT" -> 250L
+            else -> 100L
+        }
+    }
+
+    private fun startProbePolling() {
+        probePollingJob?.cancel()
+        if (activePage != DesktopPage.PROBE || !serial.isConnected()) return
+        probePollingJob = scope.launch {
+            while (serial.isConnected() && activePage == DesktopPage.PROBE) {
+                if (System.currentTimeMillis() >= probeSettlingUntilMs) {
+                    sendCommand(probePollCommand(probeActiveMode))
+                }
+                kotlinx.coroutines.delay(150L)
+            }
+        }
+    }
+
+    private fun stopProbePolling() {
+        probePollingJob?.cancel()
+        probePollingJob = null
+    }
+
     private fun sendUart() {
         val text = uartInput.text.trim()
         if (text.isEmpty()) return
@@ -1094,6 +1180,10 @@ class RPhoneDesktopApp : Application() {
                         val r = Regex("\"$key\"\\s*:\\s*([-+]?[0-9]*\\.?[0-9]+)")
                         return r.find(jsonText)?.groups?.get(1)?.value?.toDoubleOrNull()
                     }
+                    fun extractBooleanFromJson(key: String): Boolean? {
+                        val r = Regex("\"$key\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
+                        return r.find(jsonText)?.groups?.get(1)?.value?.equals("true", ignoreCase = true)
+                    }
 
                     // persist raw JSON message for records
                     scope.launch {
@@ -1109,6 +1199,8 @@ class RPhoneDesktopApp : Application() {
                         val curr = extractDoubleFromJson("curr") ?: 0.0
                         val dp = extractDoubleFromJson("dp") ?: 0.0
                         val dm = extractDoubleFromJson("dm") ?: 0.0
+                        val charge = extractStringFromJson("charge") ?: detectChargeProtocol(dp, dm)
+                        val ocpEnabled = extractBooleanFromJson("ocp_en") ?: true
                         lastKnownValue = curr
                         val now = System.currentTimeMillis()
                         if (usbLastUpdateMs > 0L) {
@@ -1116,39 +1208,60 @@ class RPhoneDesktopApp : Application() {
                             usbCapacityAccum += curr * 1000.0 * dtHours
                         }
                         usbLastUpdateMs = now
+                        usbLastStableCharge = voteUsbCharge(charge)
                         usbMetricVoltage.text = formatNumber(volt, 3)
                         usbMetricCurrent.text = formatNumber(curr, 3)
                         usbMetricDp.text = formatNumber(dp, 2)
                         usbMetricDm.text = formatNumber(dm, 2)
                         usbMetricPower.text = formatNumber(volt * curr, 2)
                         usbMetricCapacity.text = if (usbCapacityAccum <= 0.0) "--" else formatNumber(usbCapacityAccum, 1)
+                        usbMetricCharge.text = usbLastStableCharge
+                        usbMetricOcp.text = if (ocpEnabled) "ON" else "OFF"
                     } else if (mode == "PSU") {
                         val volt = extractDoubleFromJson("volt") ?: 0.0
                         val curr = extractDoubleFromJson("curr") ?: 0.0
+                        val ocpEnabled = extractBooleanFromJson("ocp_en") ?: false
+                        val ocpEvent = extractStringFromJson("ocp")?.lowercase()
+                        val pwmEnabled = extractBooleanFromJson("pwm_en") ?: false
+                        val pwmDur = extractDoubleFromJson("pwm_dur")?.toInt() ?: 2000
                         lastKnownValue = curr
                         psuMetricVoltage.text = formatNumber(volt, 3)
                         psuMetricCurrent.text = formatNumber(curr / 2.5, 3)
                         psuMetricPower.text = formatNumber(volt * curr, 2)
+                        psuMetricOcp.text = when {
+                            ocpEvent == "trip" -> "TRIP"
+                            ocpEvent == "reset" -> "ON"
+                            ocpEvent == "auto_reset" -> "ON"
+                            ocpEvent == "on" -> "ON"
+                            ocpEvent == "off" -> "OFF"
+                            ocpEnabled -> "ON"
+                            else -> "OFF"
+                        }
                     } else if (jsonText.contains("\"probe\"")) {
                         val probeMode = extractStringFromJson("probe") ?: "VOLT"
-                        when (probeMode.uppercase()) {
-                            "VOLT" -> {
-                                val volt = extractDoubleFromJson("volt") ?: 0.0
-                                probeModeLabel.text = "TEGANGAN"
-                                probeValue.text = formatNumber(volt, 3)
-                                probeVoltageLabel.text = formatNumber(volt, 3) + " V"
-                            }
-                            "DIODE" -> {
-                                val vdrop = extractDoubleFromJson("vdrop") ?: 0.0
-                                probeModeLabel.text = "DIODA"
-                                probeValue.text = formatNumber(vdrop * 1000.0, 0)
-                                probeDiodeLabel.text = formatNumber(vdrop, 3) + " V"
-                            }
-                            "OHM" -> {
-                                val ohm = extractDoubleFromJson("ohm") ?: 0.0
-                                probeModeLabel.text = "OHM"
-                                probeValue.text = formatNumber(ohm, 1)
-                                probeOhmLabel.text = formatNumber(ohm, 1) + " Ω"
+                        if (probeMode.equals("SETTLING", ignoreCase = true)) {
+                            probeSettlingUntilMs = System.currentTimeMillis() + probeCooldownMs(probeActiveMode)
+                            probeValue.text = "---"
+                        } else if (System.currentTimeMillis() >= probeSettlingUntilMs) {
+                            when (probeMode.uppercase()) {
+                                "VOLT" -> {
+                                    val volt = extractDoubleFromJson("volt") ?: 0.0
+                                    probeModeLabel.text = "TEGANGAN"
+                                    probeValue.text = formatNumber(volt, 3)
+                                    probeVoltageLabel.text = formatNumber(volt, 3) + " V"
+                                }
+                                "DIODE" -> {
+                                    val vdrop = extractDoubleFromJson("vdrop") ?: 0.0
+                                    probeModeLabel.text = "DIODA"
+                                    probeValue.text = formatNumber(vdrop * 1000.0, 0)
+                                    probeDiodeLabel.text = formatNumber(vdrop, 3) + " V"
+                                }
+                                "OHM" -> {
+                                    val ohm = extractDoubleFromJson("ohm") ?: 0.0
+                                    probeModeLabel.text = "OHM"
+                                    probeValue.text = formatNumber(ohm, 1)
+                                    probeOhmLabel.text = formatNumber(ohm, 1) + " Ω"
+                                }
                             }
                         }
                     } else if (jsonText.contains("\"boot_log_start\"") || jsonText.contains("\"boot_log_end\"")) {
@@ -1378,6 +1491,39 @@ class RPhoneDesktopApp : Application() {
                 )
                 notification.showSuccess("Compare selesai: ${formatNumber(similarity, 1)}% mirip")
             }
+        }
+    }
+
+    private fun voteUsbCharge(newValue: String): String {
+        if (usbChargeVoteBuffer.size >= 5) {
+            usbChargeVoteBuffer.removeFirst()
+        }
+        usbChargeVoteBuffer.addLast(newValue)
+
+        val freq = usbChargeVoteBuffer.groupingBy { it }.eachCount()
+        val winner = freq.entries
+            .filter { it.value >= 3 }
+            .maxByOrNull { it.value }
+            ?.key
+
+        if (winner != null) {
+            usbLastStableCharge = winner
+        }
+        return usbLastStableCharge
+    }
+
+    private fun detectChargeProtocol(dp: Double, dm: Double): String {
+        return when {
+            dp < 0.3 && dm < 0.3 -> "SDP"
+            dp in 3.0..3.6 && dm in 0.4..0.8 -> "QC 3.0"
+            dp in 3.0..3.6 && dm < 0.3 -> "QC 2.0"
+            dp >= 2.5 && dm >= 2.5 -> "DCP"
+            dp in 2.4..3.0 && dm in 1.7..2.3 -> "Apple 12W"
+            dp in 1.7..2.3 && dm in 1.7..2.3 -> "CDP"
+            dp in 0.9..1.5 && dm < 0.5 -> "Samsung AFC"
+            dp in 0.5..0.9 && dm < 0.3 -> "MTK PE"
+            dp >= 0.3 || dm >= 0.3 -> "Fast Charging"
+            else -> "UNKNOWN"
         }
     }
 
