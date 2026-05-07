@@ -989,33 +989,93 @@ class RPhoneDesktopApp : Application() {
     }
 
     private fun ingestSerialText(text: String) {
+        // Append raw text for records
         receiveBuffer.append(text).append('\n')
-        lastKnownValue = Regex("[-+]?[0-9]*\\.?[0-9]+")
-            .findAll(text)
-            .mapNotNull { it.value.toDoubleOrNull() }
-            .firstOrNull() ?: lastKnownValue
 
-        when {
-            text.contains("A", ignoreCase = true) -> usbMetricCurrent.text = formatNumber(lastKnownValue, 3)
-            text.contains("V", ignoreCase = true) -> usbMetricVoltage.text = formatNumber(lastKnownValue, 3)
-            text.contains("W", ignoreCase = true) -> usbMetricPower.text = formatNumber(lastKnownValue, 2)
-        }
-        usbMetricDp.text = formatNumber(lastKnownValue / 2.0, 2)
-        usbMetricDm.text = formatNumber(lastKnownValue / 3.0, 2)
-        psuMetricCurrent.text = formatNumber(lastKnownValue / 2.5, 3)
-        psuMetricVoltage.text = formatNumber(lastKnownValue / 10.0, 3)
-        psuMetricPower.text = formatNumber(lastKnownValue / 1.5, 2)
-        probeValue.text = formatNumber(lastKnownValue, 3)
-        probeModeLabel.text = if (text.contains("OHM", true)) {
-            "OHM"
-        } else if (text.contains("DIODE", true)) {
-            "DIODA"
+        // Quick JSON-light parser: detect JSON messages from ESP (APK sends JSON)
+        val trimmed = text.trim()
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            // helper lambdas
+            fun extractString(key: String): String? {
+                val regex = Regex("\"${'$'}key\"\\s*:\\s*\\\"([^\\\"]*)\\\"")
+                return regex.find(trimmed)?.groups?.get(1)?.value
+            }
+            fun extractDouble(key: String): Double? {
+                val regex = Regex("\"${'$'}key\"\\s*:\\s*([-+]?[0-9]*\\.?[0-9]+)")
+                return regex.find(trimmed)?.groups?.get(1)?.value?.toDoubleOrNull()
+            }
+
+            // mode-based parsing
+            val mode = extractString("mode")
+            if (mode == "USB") {
+                val volt = extractDouble("volt") ?: lastKnownValue
+                val curr = extractDouble("curr") ?: 0.0
+                val dp = extractDouble("dp") ?: 0.0
+                val dm = extractDouble("dm") ?: 0.0
+                lastKnownValue = curr
+                usbMetricVoltage.text = formatNumber(volt, 3)
+                usbMetricCurrent.text = formatNumber(curr, 3)
+                usbMetricDp.text = formatNumber(dp.toDouble(), 2)
+                usbMetricDm.text = formatNumber(dm.toDouble(), 2)
+                usbMetricPower.text = formatNumber(volt * curr, 2)
+            } else if (mode == "PSU") {
+                val volt = extractDouble("volt") ?: 0.0
+                val curr = extractDouble("curr") ?: 0.0
+                lastKnownValue = curr
+                psuMetricVoltage.text = formatNumber(volt, 3)
+                psuMetricCurrent.text = formatNumber(curr / 2.5, 3)
+                psuMetricPower.text = formatNumber(volt * curr, 2)
+            } else if (trimmed.contains("\"probe\"")) {
+                val probeMode = extractString("probe") ?: "VOLT"
+                when (probeMode.uppercase()) {
+                    "VOLT" -> {
+                        val volt = extractDouble("volt") ?: 0.0
+                        probeModeLabel.text = "TEGANGAN"
+                        probeValue.text = formatNumber(volt, 3)
+                        probeVoltageLabel.text = formatNumber(volt, 3) + " V"
+                    }
+                    "DIODE" -> {
+                        val vdrop = extractDouble("vdrop") ?: 0.0
+                        probeModeLabel.text = "DIODA"
+                        probeValue.text = formatNumber(vdrop * 1000.0, 0)
+                        probeDiodeLabel.text = formatNumber(vdrop, 3) + " V"
+                    }
+                    "OHM" -> {
+                        val ohm = extractDouble("ohm") ?: 0.0
+                        probeModeLabel.text = "OHM"
+                        probeValue.text = formatNumber(ohm, 1)
+                        probeOhmLabel.text = formatNumber(ohm, 1) + " Ω"
+                    }
+                }
+                // push to probe history list update (non-blocking)
+                // reuse existing save/display logic via lastKnownValue
+            } else if (trimmed.contains("\"boot_log_start\"") || trimmed.contains("\"boot_log_end\"")) {
+                // Wave boot log markers — just append to buffer; Database functions read full buffer
+            } else {
+                // fallback: extract any numeric value
+                lastKnownValue = Regex("[-+]?[0-9]*\\.?[0-9]+")
+                    .findAll(trimmed)
+                    .mapNotNull { it.value.toDoubleOrNull() }
+                    .firstOrNull() ?: lastKnownValue
+            }
         } else {
-            "TEGANGAN"
+            // Non-JSON: fallback numeric parsing (legacy)
+            lastKnownValue = Regex("[-+]?[0-9]*\\.?[0-9]+")
+                .findAll(text)
+                .mapNotNull { it.value.toDoubleOrNull() }
+                .firstOrNull() ?: lastKnownValue
         }
-        probeVoltageLabel.text = formatNumber(lastKnownValue, 3) + " V"
-        probeDiodeLabel.text = formatNumber(lastKnownValue / 2.0, 3) + " V"
-        probeOhmLabel.text = formatNumber(lastKnownValue * 10.0, 1) + " Ω"
+
+        // Update dependent UI and redraw charts
+        usbMetricDp.text = usbMetricDp.text ?: formatNumber(lastKnownValue / 2.0, 2)
+        usbMetricDm.text = usbMetricDm.text ?: formatNumber(lastKnownValue / 3.0, 2)
+        psuMetricCurrent.text = psuMetricCurrent.text ?: formatNumber(lastKnownValue / 2.5, 3)
+        psuMetricVoltage.text = psuMetricVoltage.text ?: formatNumber(lastKnownValue / 10.0, 3)
+        psuMetricPower.text = psuMetricPower.text ?: formatNumber(lastKnownValue / 1.5, 2)
+        probeVoltageLabel.text = probeVoltageLabel.text ?: (formatNumber(lastKnownValue, 3) + " V")
+        probeDiodeLabel.text = probeDiodeLabel.text ?: (formatNumber(lastKnownValue / 2.0, 3) + " V")
+        probeOhmLabel.text = probeOhmLabel.text ?: (formatNumber(lastKnownValue * 10.0, 1) + " Ω")
+
         drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan)
         drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple)
     }
