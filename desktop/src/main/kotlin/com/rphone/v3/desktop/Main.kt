@@ -1523,40 +1523,46 @@ class RPhoneDesktopApp : Application() {
                 return@launch
             }
 
-            val first = waveFiles[0]
-            val second = waveFiles[1]
-            val firstData = storage.load(first).orEmpty()
-            val secondData = storage.load(second).orEmpty()
-            val firstSamples = extractNumericSamples(firstData)
-            val secondSamples = extractNumericSamples(secondData)
-            val sampleCount = minOf(firstSamples.size, secondSamples.size)
+            val queryFile = waveFiles[0]
+            val queryData = storage.load(queryFile).orEmpty()
+            val querySamples = extractWaveSamples(queryData)
 
-            if (sampleCount == 0) {
+            if (querySamples.isEmpty()) {
                 withContext(Dispatchers.Main) {
                     notification.showError("Data numerik tidak ditemukan untuk compare")
                 }
                 return@launch
             }
 
-            var mae = 0.0
-            for (i in 0 until sampleCount) {
-                mae += kotlin.math.abs(firstSamples[i] - secondSamples[i])
+            val scoredMatches = waveFiles.drop(1).mapNotNull { candidateFile ->
+                val candidateData = storage.load(candidateFile).orEmpty()
+                val candidateSamples = extractWaveSamples(candidateData)
+                if (candidateSamples.isEmpty()) return@mapNotNull null
+
+                val score = waveSimilarity(querySamples, candidateSamples)
+                WaveMatch(candidateFile, score, candidateSamples.size)
+            }.sortedByDescending { it.score }
+
+            if (scoredMatches.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    notification.showError("Data referensi tidak cukup untuk compare")
+                }
+                return@launch
             }
-            mae /= sampleCount
-            val similarity = (100.0 - (mae * 10.0)).coerceIn(0.0, 100.0)
+
+            val bestMatches = scoredMatches.take(5)
 
             withContext(Dispatchers.Main) {
                 waveHistoryList.items.setAll(
-                    listOf(
-                        "COMPARE RESULT",
-                        "A: $first",
-                        "B: $second",
-                        "Samples: $sampleCount",
-                        "MAE: ${formatNumber(mae, 3)}",
-                        "Similarity: ${formatNumber(similarity, 1)}%"
-                    )
+                    buildList {
+                        add("COMPARE RESULT")
+                        add("Query: $queryFile")
+                        bestMatches.forEachIndexed { index, match ->
+                            add("${index + 1}. ${match.fileName} | ${formatNumber(match.score, 1)}% | ${match.sampleCount} samples")
+                        }
+                    }
                 )
-                notification.showSuccess("Compare selesai: ${formatNumber(similarity, 1)}% mirip")
+                notification.showSuccess("Compare selesai: ${formatNumber(bestMatches.first().score, 1)}% cocok tertinggi")
             }
         }
     }
@@ -1599,6 +1605,106 @@ class RPhoneDesktopApp : Application() {
             .findAll(text)
             .mapNotNull { it.value.toDoubleOrNull() }
             .toList()
+    }
+
+    private data class WaveMatch(val fileName: String, val score: Double, val sampleCount: Int)
+
+    private fun extractWaveSamples(text: String): List<Double> {
+        val jsonWave = Regex("\"waveformJson\"\\s*:\\s*\"([^\"]+)\"", RegexOption.IGNORE_CASE)
+            .find(text)
+            ?.groups
+            ?.get(1)
+            ?.value
+            ?.let { extractNumericSamples(it) }
+
+        if (!jsonWave.isNullOrEmpty()) return jsonWave
+
+        val nestedWave = Regex("\"waveform\"\\s*:\\s*\\[(.*?)]", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+            .find(text)
+            ?.groups
+            ?.get(1)
+            ?.value
+            ?.let { extractNumericSamples(it) }
+
+        if (!nestedWave.isNullOrEmpty()) return nestedWave
+
+        return extractNumericSamples(text)
+    }
+
+    private fun normalizeWaveform(wave: List<Double>, size: Int = 300): List<Double> {
+        if (wave.isEmpty()) return List(size) { 0.0 }
+        val resampled = if (wave.size == size) {
+            wave
+        } else {
+            val lastIndex = (wave.size - 1).coerceAtLeast(1)
+            val ratio = lastIndex.toDouble() / (size - 1).toDouble()
+            List(size) { i ->
+                val pos = i * ratio
+                val idx = pos.toInt().coerceIn(0, wave.size - 2)
+                val frac = pos - idx
+                wave[idx] * (1.0 - frac) + wave[idx + 1] * frac
+            }
+        }
+
+        val sorted = resampled.sorted()
+        val p95idx = (((sorted.size - 1) * 0.95).toInt()).coerceIn(0, sorted.size - 1)
+        val maxVal = sorted[p95idx].coerceAtLeast(0.001)
+        return resampled.map { (it / maxVal).coerceIn(0.0, 1.0) }
+    }
+
+    private fun dtwSimilarity(waveA: List<Double>, waveB: List<Double>): Double {
+        val a = normalizeWaveform(waveA)
+        val b = normalizeWaveform(waveB)
+        val n = a.size
+        val m = b.size
+        val dtw = Array(n) { DoubleArray(m) { Double.POSITIVE_INFINITY } }
+        dtw[0][0] = kotlin.math.abs(a[0] - b[0])
+
+        for (i in 1 until n) dtw[i][0] = dtw[i - 1][0] + kotlin.math.abs(a[i] - b[0])
+        for (j in 1 until m) dtw[0][j] = dtw[0][j - 1] + kotlin.math.abs(a[0] - b[j])
+
+        for (i in 1 until n) {
+            for (j in 1 until m) {
+                val cost = kotlin.math.abs(a[i] - b[j])
+                dtw[i][j] = cost + minOf(dtw[i - 1][j], dtw[i][j - 1], dtw[i - 1][j - 1])
+            }
+        }
+
+        val distance = dtw[n - 1][m - 1] / (n + m).toDouble()
+        return (100.0 - distance * 100.0).coerceAtLeast(0.0)
+    }
+
+    private fun waveSimilarity(waveUser: List<Double>, waveRef: List<Double>): Double {
+        val dtw = dtwSimilarity(waveUser, waveRef)
+        val peakUser = waveUser.maxOrNull() ?: 0.0
+        val peakRef = waveRef.maxOrNull() ?: 0.0
+        val avgUser = if (waveUser.isNotEmpty()) waveUser.average() else 0.0
+        val avgRef = if (waveRef.isNotEmpty()) waveRef.average() else 0.0
+
+        fun scaleScore(diff: Double, fullTol: Double, maxDiff: Double): Double {
+            return when {
+                diff <= fullTol -> 100.0
+                diff >= maxDiff -> 0.0
+                else -> {
+                    val range = maxDiff - fullTol
+                    val pos = diff - fullTol
+                    (100.0 - (pos / range) * 100.0).coerceAtLeast(0.0)
+                }
+            }
+        }
+
+        val peakScore = scaleScore(kotlin.math.abs(peakUser - peakRef), 0.05, 1.0)
+        val avgScore = scaleScore(kotlin.math.abs(avgUser - avgRef), 0.05, 0.8)
+        val penalty = if (peakRef <= 0.0) 0.0 else {
+            val ratio = kotlin.math.abs(peakUser - peakRef) / peakRef
+            if (ratio <= 0.15) 0.0 else {
+                val range = 0.50 - 0.15
+                val pos = (ratio - 0.15).coerceAtMost(range)
+                (pos / range) * 20.0
+            }
+        }
+
+        return (dtw * 0.50 + peakScore * 0.25 + avgScore * 0.25 - penalty).coerceIn(0.0, 100.0)
     }
 
     private fun refreshFileLists() {
