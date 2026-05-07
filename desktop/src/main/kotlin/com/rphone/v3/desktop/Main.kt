@@ -177,12 +177,12 @@ class RPhoneDesktopApp : Application() {
         }
 
         val nav = VBox(2.0)
-        navButtons[DesktopPage.USB] = navButton("⌁ USB", cyan) { selectPage(DesktopPage.USB) }
-        navButtons[DesktopPage.PSU] = navButton("⚡ PSU", purple) { selectPage(DesktopPage.PSU) }
-        navButtons[DesktopPage.PROBE] = navButton("◈ PROBE", amber) { selectPage(DesktopPage.PROBE) }
-        navButtons[DesktopPage.WAVEID] = navButton("∿ WAVE", green) { selectPage(DesktopPage.WAVEID) }
+        navButtons[DesktopPage.USB] = navButton("⌁ USB", cyan) { sendCommand("BUZZ_NAV_USB"); selectPage(DesktopPage.USB) }
+        navButtons[DesktopPage.PSU] = navButton("⚡ PSU", purple) { sendCommand("BUZZ_NAV_PSU"); selectPage(DesktopPage.PSU) }
+        navButtons[DesktopPage.PROBE] = navButton("◈ PROBE", amber) { sendCommand("BUZZ_NAV_PROBE"); selectPage(DesktopPage.PROBE) }
+        navButtons[DesktopPage.WAVEID] = navButton("∿ WAVE", green) { sendCommand("BUZZ_NAV_WAVE"); selectPage(DesktopPage.WAVEID) }
         navButtons[DesktopPage.UART] = navButton("⌲ UART", Color.web("#14B8A6")) { selectPage(DesktopPage.UART) }
-        navButtons[DesktopPage.SETTINGS] = navButton("⚙ SET", textSecondary) { selectPage(DesktopPage.SETTINGS) }
+        navButtons[DesktopPage.SETTINGS] = navButton("⚙ SET", textSecondary) { sendCommand("BUZZ_NAV_SET"); selectPage(DesktopPage.SETTINGS) }
         navButtons.values.forEach { nav.children.add(it) }
 
         val filler = Region().apply {
@@ -529,10 +529,10 @@ class RPhoneDesktopApp : Application() {
         val tileGrid = GridPane().apply {
             hgap = 10.0
             vgap = 10.0
-            add(waveTile("🗂", "Rekam Baru", "Rekam arus boot HP") { recordWaveProfile() }, 0, 0)
-            add(waveTile("📁", "Database", "Lihat profil tersimpan") { loadWaveFiles() }, 1, 0)
-            add(waveTile("◫", "Bandingkan", "Overlay 2 waveform") { compareLatestWaveProfiles() }, 0, 1)
-            add(waveTile("📥", "Import .rphp", "Tambah dari komunitas") { importWaveLog() }, 1, 1)
+            add(waveTile("🗂", "Rekam Baru", "Rekam arus boot HP") { sendCommand("BUZZ_REKAM_BARU"); recordWaveProfile() }, 0, 0)
+            add(waveTile("📁", "Database", "Lihat profil tersimpan") { sendCommand("BUZZ_BUKA_DB"); loadWaveFiles() }, 1, 0)
+            add(waveTile("◫", "Bandingkan", "Overlay 2 waveform") { sendCommand("BUZZ_BANDINGKAN"); compareLatestWaveProfiles() }, 0, 1)
+            add(waveTile("📥", "Import .rphp", "Tambah dari komunitas") { sendCommand("BUZZ_IMPORT"); importWaveLog() }, 1, 1)
         }
 
         val rightPane = VBox(10.0).apply {
@@ -1292,6 +1292,7 @@ class RPhoneDesktopApp : Application() {
 
     private fun recordWaveProfile() {
         scope.launch {
+            sendCommand("BUZZ_SIAP_REKAM")
             val filename = "wave-${LocalTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))}.rphp"
             val data = buildString {
                 appendLine("R-Phone V3 WaveID Profile")
@@ -1304,6 +1305,7 @@ class RPhoneDesktopApp : Application() {
             val ok = storage.save(filename, data)
             withContext(Dispatchers.Main) {
                 if (ok) {
+                    sendCommand("BUZZ_REKAM_SELESAI")
                     notification.showSuccess("Profile tersimpan: $filename")
                     refreshFileLists()
                 } else {
