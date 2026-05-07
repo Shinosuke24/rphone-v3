@@ -383,22 +383,24 @@ class RPhoneDesktopApp : Application() {
             style = buttonStyle(textSecondary, "#111827", "#64748B")
             selectedProperty().addListener { _, _, selected ->
                 text = if (selected) "PWM ON" else "PWM OFF"
-                sendCommand(if (selected) "BUZZ_PWM_ON" else "BUZZ_PWM_OFF")
+                sendCommand(if (selected) "PWM_ON" else "PWM_OFF")
             }
         }
         val ocpToggle = ToggleButton("OCP OFF").apply {
             style = buttonStyle(textSecondary, "#111827", "#64748B")
             selectedProperty().addListener { _, _, selected ->
                 text = if (selected) "OCP ON" else "OCP OFF"
-                sendCommand(if (selected) "BUZZ_OCP_ON" else "BUZZ_OCP_OFF")
+                sendCommand(if (selected) "OCP_ON" else "OCP_OFF")
             }
         }
 
         val pwmSlider = sliderWithLabel("PWM", 0.0, 19.0, 3.0, "2.0s") { value ->
-            sendCommand("SET_PWM_${value.toInt()}")
+            val durMs = ((value.toInt() + 1) * 500).coerceAtLeast(500)
+            sendCommand(String.format(java.util.Locale.US, "SET_PWM_DUR:%d", durMs))
         }
         val ocpSlider = sliderWithLabel("OCP", 0.0, 95.0, 25.0, "3.0A") { value ->
-            sendCommand("SET_OCP_${value.toInt()}")
+            val threshold = 0.5 + (value.toInt() * 0.1)
+            sendCommand(String.format(java.util.Locale.US, "SET_OCP:%.1f", threshold))
         }
 
         val settingsPanel = card("PWM + OCP", VBox(8.0).apply {
@@ -407,6 +409,7 @@ class RPhoneDesktopApp : Application() {
 
         val leftColumn = VBox(10.0).apply {
             prefWidth = 360.0
+            maxWidth = 360.0
             children.addAll(
                 card("PSU Metrics", metricsPanel(
                     listOf(
