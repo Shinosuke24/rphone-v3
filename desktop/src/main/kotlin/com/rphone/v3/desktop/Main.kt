@@ -668,9 +668,15 @@ class RPhoneDesktopApp : Application() {
             val loaded = storage.load("ai_settings.json")
             if (!loaded.isNullOrEmpty()) {
                 // crude parse
-                val p = Regex("\"provider\"\s*:\s*\"([^\"]+)\"").find(loaded)?.groups?.get(1)?.value
-                val k = Regex("\"apiKey\"\s*:\s*\"([^\"]*)\"").find(loaded)?.groups?.get(1)?.value
-                val u = Regex("\"baseUrl\"\s*:\s*\"([^\"]*)\"").find(loaded)?.groups?.get(1)?.value
+                val p = Regex(
+                    """"provider"\s*:\s*"([^"]+)""""
+                ).find(loaded)?.groups?.get(1)?.value
+                val k = Regex(
+                    """"apiKey"\s*:\s*"([^"]*)""""
+                ).find(loaded)?.groups?.get(1)?.value
+                val u = Regex(
+                    """"baseUrl"\s*:\s*"([^"]*)""""
+                ).find(loaded)?.groups?.get(1)?.value
                 withContext(Dispatchers.Main) {
                     if (p != null) aiCombo.value = p
                     if (k != null) aiApiKey.text = k
