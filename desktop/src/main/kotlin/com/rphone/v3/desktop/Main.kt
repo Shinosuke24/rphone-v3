@@ -101,6 +101,8 @@ class RPhoneDesktopApp : Application() {
     private lateinit var psuMetricPower: Label
     private lateinit var psuMetricCapacity: Label
     private lateinit var psuMetricOcp: Label
+    private lateinit var psuPwmButton: Button
+    private lateinit var psuOcpButton: Button
     private lateinit var probeValue: Label
     private lateinit var probeModeLabel: Label
     private lateinit var probeVoltageLabel: Label
@@ -129,6 +131,9 @@ class RPhoneDesktopApp : Application() {
     private var probeActiveMode = "VOLT"
     private var probeSettlingUntilMs = 0L
     private var probePollingJob: Job? = null
+    private var psuPwmEnabled = false
+    private var psuPwmDurationMs = 2000
+    private var psuOcpStatus = "OFF"
 
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
 
@@ -403,23 +408,48 @@ class RPhoneDesktopApp : Application() {
         psuChartCanvas.widthProperty().addListener { _, _, _ -> drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple) }
         psuChartCanvas.heightProperty().addListener { _, _, _ -> drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple) }
 
-        val pwmToggle = ToggleButton("PWM OFF").apply {
+        psuPwmButton = Button("PWM OFF").apply {
             style = buttonStyle(textSecondary, "#111827", "#64748B")
-            selectedProperty().addListener { _, _, selected ->
-                text = if (selected) "PWM ON" else "PWM OFF"
-                sendCommand(if (selected) "PWM_ON" else "PWM_OFF")
+            setOnAction {
+                val nowEnabled = psuPwmEnabled
+                if (nowEnabled) {
+                    sendCommands("BUZZ_PWM_OFF", "PWM_OFF")
+                    psuPwmEnabled = false
+                } else {
+                    sendCommands("BUZZ_PWM_ON", "PWM_ON")
+                    psuPwmEnabled = true
+                }
+                text = if (psuPwmEnabled) "PWM ON" else "PWM OFF"
             }
         }
-        val ocpToggle = ToggleButton("OCP OFF").apply {
+        psuOcpButton = Button("OCP OFF").apply {
             style = buttonStyle(textSecondary, "#111827", "#64748B")
-            selectedProperty().addListener { _, _, selected ->
-                text = if (selected) "OCP ON" else "OCP OFF"
-                sendCommand(if (selected) "OCP_ON" else "OCP_OFF")
+            setOnAction {
+                when (psuOcpStatus) {
+                    "TRIP" -> {
+                        sendCommand("RESET_OCP")
+                        psuOcpStatus = "ON"
+                    }
+                    "ON" -> {
+                        sendCommands("BUZZ_OCP_OFF", "OCP_OFF")
+                        psuOcpStatus = "OFF"
+                    }
+                    else -> {
+                        sendCommands("BUZZ_OCP_ON", "OCP_ON")
+                        psuOcpStatus = "ON"
+                    }
+                }
+                text = when (psuOcpStatus) {
+                    "TRIP" -> "TRIP"
+                    "ON" -> "OCP ON"
+                    else -> "OCP OFF"
+                }
             }
         }
 
         val pwmSlider = sliderWithLabel("PWM", 0.0, 19.0, 3.0, "2.0s") { value ->
             val durMs = ((value.toInt() + 1) * 500).coerceAtLeast(500)
+            psuPwmDurationMs = durMs
             sendCommand(String.format(java.util.Locale.US, "SET_PWM_DUR:%d", durMs))
         }
         val ocpSlider = sliderWithLabel("OCP", 0.0, 95.0, 25.0, "3.0A") { value ->
@@ -428,7 +458,7 @@ class RPhoneDesktopApp : Application() {
         }
 
         val settingsPanel = card("PWM + OCP", VBox(8.0).apply {
-            children.addAll(pwmToggle, pwmSlider, ocpToggle, ocpSlider)
+            children.addAll(psuPwmButton, pwmSlider, psuOcpButton, ocpSlider)
         })
 
         val leftColumn = VBox(10.0).apply {
@@ -1256,6 +1286,9 @@ class RPhoneDesktopApp : Application() {
                         psuMetricVoltage.text = formatNumber(volt, 3)
                         psuMetricCurrent.text = formatNumber(curr / 2.5, 3)
                         psuMetricPower.text = formatNumber(volt * curr, 2)
+                        psuPwmEnabled = pwmEnabled
+                        psuPwmDurationMs = pwmDur
+                        psuPwmButton.text = if (psuPwmEnabled) "PWM ON" else "PWM OFF"
                         psuMetricOcp.text = when {
                             ocpEvent == "trip" -> "TRIP"
                             ocpEvent == "reset" -> "ON"
@@ -1264,6 +1297,12 @@ class RPhoneDesktopApp : Application() {
                             ocpEvent == "off" -> "OFF"
                             ocpEnabled -> "ON"
                             else -> "OFF"
+                        }
+                        psuOcpStatus = psuMetricOcp.text
+                        psuOcpButton.text = when (psuOcpStatus) {
+                            "TRIP" -> "TRIP"
+                            "ON" -> "OCP ON"
+                            else -> "OCP OFF"
                         }
                     } else if (jsonText.contains("\"probe\"")) {
                         val probeMode = extractStringFromJson("probe") ?: "VOLT"
