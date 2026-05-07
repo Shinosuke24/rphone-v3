@@ -471,7 +471,7 @@ class RPhoneDesktopApp : Application() {
                 card("Mode Tabs", modeTabs),
                 card("Probe Actions", VBox(8.0).apply {
                     children.addAll(
-                        primaryActionButton("MULAI ANALISA", amber) { sendCommand("PROBE_ANALYZE") },
+                        primaryActionButton("MULAI ANALISA", amber) { sendCommands("PROBE_ANALYZE","BUZZ_MULAI_ANALISA") },
                         actionButtonsRow(
                             secondaryActionButton("SIMPAN DATA", amber) { saveProbeSnapshot() },
                             secondaryActionButton("LIHAT DETAIL", textPrimary) { notification.showMessage("Detail probe dibuka di shell ini") },
@@ -636,6 +636,49 @@ class RPhoneDesktopApp : Application() {
         }
         settingsStatus = label("Ready", textSecondary, 11.0, false)
 
+        // AI provider settings
+        val aiProviders = FXCollections.observableArrayList("liteLLM", "claude", "groq", "gemini")
+        val aiCombo = ComboBox<String>(aiProviders).apply { value = "liteLLM" }
+        val aiApiKey = TextField().apply { promptText = "API Key"; style = controlStyle() }
+        val aiBaseUrl = TextField().apply { promptText = "Base URL (liteLLM)"; style = controlStyle() }
+
+        fun saveAiConfig() {
+            scope.launch {
+                val json = buildString {
+                    appendLine("{")
+                    appendLine("  \"provider\": \"${aiCombo.value}\",")
+                    appendLine("  \"apiKey\": \"${aiApiKey.text}\",")
+                    appendLine("  \"baseUrl\": \"${aiBaseUrl.text}\"")
+                    appendLine("}")
+                }
+                val ok = storage.save("ai_settings.json", json)
+                withContext(Dispatchers.Main) {
+                    if (ok) {
+                        sendCommand("BUZZ_NAV_SET")
+                        notification.showSuccess("AI config tersimpan")
+                    } else {
+                        notification.showError("Gagal simpan AI config")
+                    }
+                }
+            }
+        }
+
+        // load existing
+        scope.launch {
+            val loaded = storage.load("ai_settings.json")
+            if (!loaded.isNullOrEmpty()) {
+                // crude parse
+                val p = Regex("\"provider\"\s*:\s*\"([^\"]+)\"").find(loaded)?.groups?.get(1)?.value
+                val k = Regex("\"apiKey\"\s*:\s*\"([^\"]*)\"").find(loaded)?.groups?.get(1)?.value
+                val u = Regex("\"baseUrl\"\s*:\s*\"([^\"]*)\"").find(loaded)?.groups?.get(1)?.value
+                withContext(Dispatchers.Main) {
+                    if (p != null) aiCombo.value = p
+                    if (k != null) aiApiKey.text = k
+                    if (u != null) aiBaseUrl.text = u
+                }
+            }
+        }
+
         return scrollPage(VBox(10.0).apply {
             children.addAll(
                 pageHeader("SETTINGS", textSecondary, "SET"),
@@ -649,6 +692,20 @@ class RPhoneDesktopApp : Application() {
                             secondaryActionButton("Beep", textSecondary) { notification.vibrate(80) }
                         ),
                         settingsStatus
+                    )
+                }),
+                card("AI Provider", VBox(8.0).apply {
+                    children.addAll(
+                        label("AI PROVIDER", textSecondary, 11.0, true),
+                        aiCombo,
+                        label("API Key", textSecondary, 11.0, true),
+                        aiApiKey,
+                        label("Base URL", textSecondary, 11.0, true),
+                        aiBaseUrl,
+                        actionButtonsRow(
+                            secondaryActionButton("Fetch Models", purple) { notification.showMessage("Fetching models (stub)...") },
+                            primaryActionButton("SIMPAN KONFIGURASI AI", green) { saveAiConfig() }
+                        )
                     )
                 }),
                 card("About", VBox(6.0).apply {
@@ -1008,77 +1065,93 @@ class RPhoneDesktopApp : Application() {
     private fun ingestSerialText(text: String) {
         // Append raw text for records
         receiveBuffer.append(text).append('\n')
-
-        // Quick JSON-light parser: detect JSON messages from ESP (APK sends JSON)
+        // Robust JSON parsing: extract JSON substring if present and parse via JSONObject
         val trimmed = text.trim()
-        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-            // helper lambdas
-            fun extractString(key: String): String? {
-                val regex = Regex("\"${'$'}key\"\\s*:\\s*\\\"([^\\\"]*)\\\"")
-                return regex.find(trimmed)?.groups?.get(1)?.value
-            }
-            fun extractDouble(key: String): Double? {
-                val regex = Regex("\"${'$'}key\"\\s*:\\s*([-+]?[0-9]*\\.?[0-9]+)")
-                return regex.find(trimmed)?.groups?.get(1)?.value?.toDoubleOrNull()
-            }
+        var parsed = false
+        if (trimmed.contains('{') && trimmed.contains('}')) {
+            val start = trimmed.indexOf('{')
+            val end = trimmed.lastIndexOf('}')
+            if (end > start) {
+                val jsonText = trimmed.substring(start, end + 1)
+                try {
+                    // helper extractors for key values from the jsonText
+                    fun extractStringFromJson(key: String): String? {
+                        val r = Regex("\"${'$'}key\"\\s*:\\s*\\\"([^\\\"]*)\\\"")
+                        return r.find(jsonText)?.groups?.get(1)?.value
+                    }
+                    fun extractDoubleFromJson(key: String): Double? {
+                        val r = Regex("\"${'$'}key\"\\s*:\\s*([-+]?[0-9]*\\.?[0-9]+)")
+                        return r.find(jsonText)?.groups?.get(1)?.value?.toDoubleOrNull()
+                    }
 
-            // mode-based parsing
-            val mode = extractString("mode")
-            if (mode == "USB") {
-                val volt = extractDouble("volt") ?: lastKnownValue
-                val curr = extractDouble("curr") ?: 0.0
-                val dp = extractDouble("dp") ?: 0.0
-                val dm = extractDouble("dm") ?: 0.0
-                lastKnownValue = curr
-                usbMetricVoltage.text = formatNumber(volt, 3)
-                usbMetricCurrent.text = formatNumber(curr, 3)
-                usbMetricDp.text = formatNumber(dp.toDouble(), 2)
-                usbMetricDm.text = formatNumber(dm.toDouble(), 2)
-                usbMetricPower.text = formatNumber(volt * curr, 2)
-            } else if (mode == "PSU") {
-                val volt = extractDouble("volt") ?: 0.0
-                val curr = extractDouble("curr") ?: 0.0
-                lastKnownValue = curr
-                psuMetricVoltage.text = formatNumber(volt, 3)
-                psuMetricCurrent.text = formatNumber(curr / 2.5, 3)
-                psuMetricPower.text = formatNumber(volt * curr, 2)
-            } else if (trimmed.contains("\"probe\"")) {
-                val probeMode = extractString("probe") ?: "VOLT"
-                when (probeMode.uppercase()) {
-                    "VOLT" -> {
-                        val volt = extractDouble("volt") ?: 0.0
-                        probeModeLabel.text = "TEGANGAN"
-                        probeValue.text = formatNumber(volt, 3)
-                        probeVoltageLabel.text = formatNumber(volt, 3) + " V"
+                    // persist raw JSON message for records
+                    scope.launch {
+                        val fname = "rx-json-${LocalTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmssSSS"))}.json"
+                        storage.save(fname, jsonText)
                     }
-                    "DIODE" -> {
-                        val vdrop = extractDouble("vdrop") ?: 0.0
-                        probeModeLabel.text = "DIODA"
-                        probeValue.text = formatNumber(vdrop * 1000.0, 0)
-                        probeDiodeLabel.text = formatNumber(vdrop, 3) + " V"
+                    appendConsole("RX_JSON", jsonText)
+
+                    val mode = extractStringFromJson("mode")
+                    if (mode == "USB") {
+                        val volt = extractDoubleFromJson("volt") ?: lastKnownValue
+                        val curr = extractDoubleFromJson("curr") ?: 0.0
+                        val dp = extractDoubleFromJson("dp") ?: 0.0
+                        val dm = extractDoubleFromJson("dm") ?: 0.0
+                        lastKnownValue = curr
+                        usbMetricVoltage.text = formatNumber(volt, 3)
+                        usbMetricCurrent.text = formatNumber(curr, 3)
+                        usbMetricDp.text = formatNumber(dp, 2)
+                        usbMetricDm.text = formatNumber(dm, 2)
+                        usbMetricPower.text = formatNumber(volt * curr, 2)
+                    } else if (mode == "PSU") {
+                        val volt = extractDoubleFromJson("volt") ?: 0.0
+                        val curr = extractDoubleFromJson("curr") ?: 0.0
+                        lastKnownValue = curr
+                        psuMetricVoltage.text = formatNumber(volt, 3)
+                        psuMetricCurrent.text = formatNumber(curr / 2.5, 3)
+                        psuMetricPower.text = formatNumber(volt * curr, 2)
+                    } else if (jsonText.contains("\"probe\"")) {
+                        val probeMode = extractStringFromJson("probe") ?: "VOLT"
+                        when (probeMode.uppercase()) {
+                            "VOLT" -> {
+                                val volt = extractDoubleFromJson("volt") ?: 0.0
+                                probeModeLabel.text = "TEGANGAN"
+                                probeValue.text = formatNumber(volt, 3)
+                                probeVoltageLabel.text = formatNumber(volt, 3) + " V"
+                            }
+                            "DIODE" -> {
+                                val vdrop = extractDoubleFromJson("vdrop") ?: 0.0
+                                probeModeLabel.text = "DIODA"
+                                probeValue.text = formatNumber(vdrop * 1000.0, 0)
+                                probeDiodeLabel.text = formatNumber(vdrop, 3) + " V"
+                            }
+                            "OHM" -> {
+                                val ohm = extractDoubleFromJson("ohm") ?: 0.0
+                                probeModeLabel.text = "OHM"
+                                probeValue.text = formatNumber(ohm, 1)
+                                probeOhmLabel.text = formatNumber(ohm, 1) + " Ω"
+                            }
+                        }
+                    } else if (jsonText.contains("\"boot_log_start\"") || jsonText.contains("\"boot_log_end\"")) {
+                        // boot log markers — keep in buffer for WaveID import
                     }
-                    "OHM" -> {
-                        val ohm = extractDouble("ohm") ?: 0.0
-                        probeModeLabel.text = "OHM"
-                        probeValue.text = formatNumber(ohm, 1)
-                        probeOhmLabel.text = formatNumber(ohm, 1) + " Ω"
-                    }
+                    parsed = true
+                } catch (e: Exception) {
+                    appendConsole("RX_ERR", "JSON parse failed: ${e.message}")
                 }
-                // push to probe history list update (non-blocking)
-                // reuse existing save/display logic via lastKnownValue
-            } else if (trimmed.contains("\"boot_log_start\"") || trimmed.contains("\"boot_log_end\"")) {
-                // Wave boot log markers — just append to buffer; Database functions read full buffer
-            } else {
-                // fallback: extract any numeric value
-                lastKnownValue = Regex("[-+]?[0-9]*\\.?[0-9]+")
-                    .findAll(trimmed)
-                    .mapNotNull { it.value.toDoubleOrNull() }
-                    .firstOrNull() ?: lastKnownValue
             }
-        } else {
-            // Non-JSON: fallback numeric parsing (legacy)
+        }
+
+        if (!parsed) {
+            // suspicious payloads: only dots or non-numeric characters
+            if (trimmed.isNotEmpty() && trimmed.all { it == '.' }) {
+                // log raw hex for debugging
+                val hex = text.toByteArray(Charsets.UTF_8).joinToString(" ") { String.format("%02X", it) }
+                appendConsole("RX_HEX", hex)
+            }
+            // fallback: extract any numeric value
             lastKnownValue = Regex("[-+]?[0-9]*\\.?[0-9]+")
-                .findAll(text)
+                .findAll(trimmed)
                 .mapNotNull { it.value.toDoubleOrNull() }
                 .firstOrNull() ?: lastKnownValue
         }
@@ -1113,6 +1186,7 @@ class RPhoneDesktopApp : Application() {
             val ok = storage.save(filename, payload)
             withContext(Dispatchers.Main) {
                 if (ok) {
+                    sendCommand("BUZZ_PROBE_SAVED")
                     lastSavedRecord = filename
                     notification.showSuccess("Probe snapshot tersimpan: $filename")
                     refreshProbeHistory()
