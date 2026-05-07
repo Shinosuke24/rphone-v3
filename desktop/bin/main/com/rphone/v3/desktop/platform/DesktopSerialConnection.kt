@@ -18,7 +18,6 @@ class DesktopSerialConnection : SerialConnection {
     private var serialPort: SerialPort? = null
     private val receiveFlow = MutableSharedFlow<ByteArray>()
     private val executor = Executors.newSingleThreadExecutor()
-    private val readBuffer = StringBuilder()
     
     override suspend fun connect(devicePath: String): Boolean {
         return try {
@@ -50,7 +49,6 @@ class DesktopSerialConnection : SerialConnection {
         return try {
             serialPort?.closePort()
             serialPort = null
-            readBuffer.clear()
             logger.info("Disconnected")
             true
         } catch (e: Exception) {
@@ -80,38 +78,15 @@ class DesktopSerialConnection : SerialConnection {
     override suspend fun getAvailableDevices(): List<SerialDevice> {
         return try {
             SerialPort.getCommPorts().map { port ->
-                val descName = port.descriptivePortName ?: port.systemPortName
-                // Auto-detect Bluetooth devices (Windows lists them as "COM" ports with "Bluetooth" in description)
-                val displayName = if (descName.contains("Bluetooth", ignoreCase = true)) {
-                    "${port.systemPortName} [Bluetooth]"
-                } else {
-                    descName
-                }
-                
                 SerialDevice(
                     path = port.systemPortName,
-                    name = displayName
+                    name = port.descriptivePortName ?: port.systemPortName
                 )
             }
         } catch (e: Exception) {
             logger.error("Error getting available devices", e)
             emptyList()
         }
-    }
-    
-    /**
-     * Get only Bluetooth COM ports
-     * Windows automatically exposes Bluetooth serial devices as COM ports
-     */
-    suspend fun getBluetoothDevices(): List<SerialDevice> {
-        return getAvailableDevices().filter { it.name.contains("Bluetooth", ignoreCase = true) }
-    }
-    
-    /**
-     * Get only USB/wired COM ports
-     */
-    suspend fun getUsbDevices(): List<SerialDevice> {
-        return getAvailableDevices().filter { !it.name.contains("Bluetooth", ignoreCase = true) }
     }
     
     private fun startReadingThread() {
@@ -121,23 +96,14 @@ class DesktopSerialConnection : SerialConnection {
                 try {
                     val bytesRead = serialPort?.readBytes(buffer, buffer.size)
                     if (bytesRead != null && bytesRead > 0) {
-                        val chunk = String(buffer, 0, bytesRead, Charsets.UTF_8)
-                        readBuffer.append(chunk)
-                        var newlineIndex = readBuffer.indexOf("\n")
-                        while (newlineIndex >= 0) {
-                            val line = readBuffer.substring(0, newlineIndex).trim()
-                            readBuffer.delete(0, newlineIndex + 1)
-                            if (line.isNotBlank()) {
-                                val data = line.toByteArray(Charsets.UTF_8)
-                                try {
-                                    kotlinx.coroutines.runBlocking {
-                                        receiveFlow.emit(data)
-                                    }
-                                } catch (e: Exception) {
-                                    logger.error("Error emitting data", e)
-                                }
+                        val data = buffer.copyOf(bytesRead)
+                        // Emit to flow
+                        try {
+                            kotlinx.coroutines.runBlocking {
+                                receiveFlow.emit(data)
                             }
-                            newlineIndex = readBuffer.indexOf("\n")
+                        } catch (e: Exception) {
+                            logger.error("Error emitting data", e)
                         }
                     }
                 } catch (e: Exception) {

@@ -8,6 +8,9 @@ import com.rphone.v3.core.platform.SerialDevice
 import com.rphone.v3.desktop.platform.DesktopFileStorage
 import com.rphone.v3.desktop.platform.DesktopNotification
 import com.rphone.v3.desktop.platform.DesktopSerialConnection
+import com.rphone.v3.desktop.tts.DesktopTtsManager
+import com.rphone.v3.desktop.scheduler.BackgroundTaskScheduler
+import com.rphone.v3.desktop.scheduler.SupabaseCloudPollingTask
 import javafx.application.Application
 import javafx.application.Platform
 import javafx.beans.value.ChangeListener
@@ -87,6 +90,9 @@ class RPhoneDesktopApp : Application() {
     private lateinit var storage: FileStorage
     private lateinit var notification: PlatformNotification
     private lateinit var waveIdManager: com.rphone.v3.desktop.managers.WaveIDManager
+    private lateinit var ttsManager: DesktopTtsManager
+    private lateinit var backgroundScheduler: BackgroundTaskScheduler
+    private var cloudPollingTask: SupabaseCloudPollingTask? = null
 
     private lateinit var pageHost: StackPane
     private lateinit var deviceCombo: ComboBox<SerialDevice>
@@ -268,18 +274,32 @@ class RPhoneDesktopApp : Application() {
         storage = PlatformProvider.getFileStorage()
         notification = PlatformProvider.getNotification()
         waveIdManager = com.rphone.v3.desktop.managers.WaveIDManager()
+        
+        // Initialize Text-to-Speech (equivalent to ProbeTtsManager in APK)
+        ttsManager = DesktopTtsManager()
+        
+        // Initialize background task scheduler (equivalent to WorkManager in APK)
+        backgroundScheduler = BackgroundTaskScheduler.getInstance()
+        
+        // Start cloud polling (15 min intervals, same as APK SupabasePollingWorker)
+        cloudPollingTask = SupabaseCloudPollingTask(
+            onDataReceived = { data -> println("Cloud sync: $data") },
+            onError = { e -> println("Cloud sync error: ${e.message}") }
+        )
+        cloudPollingTask?.start()
 
         val root = BorderPane().apply {
             style = "-fx-background-color: linear-gradient(to bottom right, #050810, #070D18);"
+            top = buildWindowControlBar(stage)
             left = buildSidebar()
             center = buildMainArea()
         }
 
         stage.title = "R-Phone V3 Desktop"
         stage.width = 1280.0
-        stage.height = 760.0
+        stage.height = 800.0
         stage.minWidth = 1200.0
-        stage.minHeight = 700.0
+        stage.minHeight = 720.0
         stage.isMaximized = false
         stage.scene = Scene(root)
         stage.show()
@@ -291,8 +311,53 @@ class RPhoneDesktopApp : Application() {
 
     override fun stop() {
         receiveJob?.cancel()
+        cloudPollingTask?.stop()
+        backgroundScheduler.shutdown()
+        ttsManager.shutdown()
         scope.cancel()
         super.stop()
+    }
+
+    /**
+     * Build top window control bar with maximize, minimize, close buttons
+     * Provides desktop window controls equivalent to native title bar
+     */
+    private fun buildWindowControlBar(stage: Stage): HBox {
+        val titleLabel = Label("R-Phone V3 Desktop • AI-Powered Device Diagnostics").apply {
+            style = "-fx-text-fill: #94A3B8; -fx-font-size: 12; -fx-font-weight: bold;"
+            maxWidth = Double.MAX_VALUE
+        }
+
+        val minimizeBtn = Button("_").apply {
+            style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+            prefWidth = 36.0
+            setOnAction { stage.isIconified = true }
+        }
+
+        val maximizeBtn = Button("☐").apply {
+            style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+            prefWidth = 36.0
+            setOnAction { stage.isMaximized = !stage.isMaximized }
+        }
+
+        val closeBtn = Button("✕").apply {
+            style = buttonStyle(red, "#111827", "#EF4444")
+            prefWidth = 36.0
+            setOnAction { stage.close() }
+        }
+
+        return HBox(6.0).apply {
+            padding = Insets(6.0)
+            alignment = Pos.CENTER_LEFT
+            style = "-fx-background-color: #080C14; -fx-border-color: #131D2E; -fx-border-width: 0 0 1 0;"
+            children.addAll(
+                titleLabel,
+                Region().apply { HBox.setHgrow(this, Priority.ALWAYS) },
+                minimizeBtn,
+                maximizeBtn,
+                closeBtn
+            )
+        }
     }
 
     private fun buildSidebar(): VBox {
@@ -668,6 +733,15 @@ class RPhoneDesktopApp : Application() {
             children.addAll(
                 topCard,
                 card("Mode Tabs", modeTabs),
+                card("Audio Reading", VBox(6.0).apply {
+                    children.addAll(
+                        secondaryActionButton("🔊 BACAKAN NILAI", green) {
+                            // Play TTS: read current probe value
+                            ttsManager.playProbeReading(probeActiveMode, probeValue.text ?: "0.000")
+                        },
+                        label("Click untuk dengar nilai probe (Requires TTS Audio Device)", textSecondary, 9.0, false)
+                    )
+                }),
                 actionButtonsRow(
                     primaryActionButton("MULAI ANALISA", amber) { sendCommands("PROBE_ANALYZE", "BUZZ_MULAI_ANALISA") },
                     secondaryActionButton("SIMPAN DATA", amber) { saveProbeSnapshot() },

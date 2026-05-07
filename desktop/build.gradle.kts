@@ -31,7 +31,7 @@ dependencies {
     implementation("org.openjfx:javafx-controls:22.0.1:win")
     implementation("org.openjfx:javafx-fxml:22.0.1:win")
     
-    // Serial communication for Windows
+    // Serial communication for Windows (supports USB + Bluetooth COM ports)
     implementation("com.fazecast:jSerialComm:2.10.4")
     
     // Database
