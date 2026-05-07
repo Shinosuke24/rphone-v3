@@ -45,6 +45,7 @@ import javafx.util.StringConverter
 import javafx.animation.KeyFrame
 import javafx.animation.Timeline
 import javafx.util.Duration
+import javafx.scene.input.MouseEvent
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -749,6 +750,9 @@ class RPhoneDesktopApp : Application() {
         }
         canvas.widthProperty().bind(wrapper.widthProperty())
         canvas.heightProperty().bind(wrapper.heightProperty())
+        // Prevent canvas click from causing unexpected layout/focus changes
+        canvas.isFocusTraversable = false
+        canvas.addEventHandler(MouseEvent.MOUSE_CLICKED) { it.consume() }
         Platform.runLater {
             val accent = if (canvas == psuChartCanvas) purple else cyan
             drawWaveform(canvas.graphicsContext2D, canvas.width, canvas.height, accent)

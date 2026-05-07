@@ -23,7 +23,7 @@ class DesktopSerialConnection : SerialConnection {
         return try {
             val port = SerialPort.getCommPort(devicePath)
             port.setComPortParameters(
-                9600,           // Baud rate (adjust if needed)
+                115200,         // Baud rate (ESP commonly uses 115200)
                 8,              // Data bits
                 1,              // Stop bits
                 0               // No parity
