@@ -29,6 +29,7 @@ class ProbeViewModel(private val storage: FileStorage) {
     private val probePollIntervalMs = 150L
     private var pollingThread: Thread? = null
     private var isPolling = false
+    private var currentMode = Mode.VOLT
     private val probeVoltBuffer = ArrayDeque<Double>(5)
     private val probeDiodeBuffer = ArrayDeque<Double>(5)
     private val probeOhmBuffer = ArrayDeque<Double>(5)
@@ -205,8 +206,15 @@ class ProbeViewModel(private val storage: FileStorage) {
     }
 
     /**
+     * Set probe mode for polling (VOLT/DIODE/OHM).
+     */
+    fun setProbeMode(mode: Mode) {
+        currentMode = mode
+    }
+
+    /**
      * Start polling periodically (parity with APK ProbeViewModel.startPolling).
-     * Sends GET_VOLT / GET_DIODE / GET_OHM commands every 150ms.
+     * Sends GET_VOLT / GET_DIODE / GET_OHM commands every 150ms based on current mode.
      */
     fun startPolling() {
         if (isPolling) return
@@ -214,12 +222,11 @@ class ProbeViewModel(private val storage: FileStorage) {
         pollingThread = Thread {
             while (isPolling) {
                 try {
-                    // Determine current mode and send appropriate poll command
-                    val pollCmd = when {
-                        probeVoltBuffer.isNotEmpty() -> "GET_VOLT"
-                        probeDiodeBuffer.isNotEmpty() -> "GET_DIODE"
-                        probeOhmBuffer.isNotEmpty() -> "GET_OHM"
-                        else -> "GET_VOLT" // default mode
+                    // Send command based on current probe mode
+                    val pollCmd = when (currentMode) {
+                        Mode.VOLT -> "GET_VOLT"
+                        Mode.DIODE -> "GET_DIODE"
+                        Mode.OHM -> "GET_OHM"
                     }
                     onSendCommand?.invoke(pollCmd)
                     Thread.sleep(probePollIntervalMs)

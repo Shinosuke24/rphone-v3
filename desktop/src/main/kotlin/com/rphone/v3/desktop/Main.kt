@@ -868,6 +868,12 @@ class RPhoneDesktopApp : Application() {
                 actionButtonsRow(
                     primaryActionButton("MULAI ANALISA", amber) { 
                         // Start actual probe analysis/polling (parity with APK ProbeViewModel)
+                        val mode = when (probeActiveMode.uppercase()) {
+                            "DIODE" -> ProbeViewModel.Mode.DIODE
+                            "OHM" -> ProbeViewModel.Mode.OHM
+                            else -> ProbeViewModel.Mode.VOLT
+                        }
+                        probeViewModel.setProbeMode(mode)
                         probeViewModel.startPolling()
                         sendCommand("BUZZ_MULAI_ANALISA")
                     },
@@ -926,6 +932,11 @@ class RPhoneDesktopApp : Application() {
         val tileGrid = GridPane().apply {
             hgap = 10.0
             vgap = 10.0
+            prefWidth = 720.0
+            minWidth = 720.0
+            maxWidth = 720.0
+            ColumnConstraints().apply { percentWidth = 50.0 }.also { columnConstraints.add(it) }
+            ColumnConstraints().apply { percentWidth = 50.0 }.also { columnConstraints.add(it) }
             add(waveTile("🗂", "Rekam Baru", "Rekam arus boot HP") { sendCommand("BUZZ_REKAM_BARU"); recordWaveProfile() }, 0, 0)
             add(waveTile("📁", "Database", "Lihat profil tersimpan") { sendCommand("BUZZ_BUKA_DB"); syncWaveDatabase(); loadWaveFiles() }, 1, 0)
             add(waveTile("◫", "Bandingkan", "Overlay 2 waveform") { sendCommand("BUZZ_BANDINGKAN"); compareLatestWaveProfiles() }, 0, 1)
@@ -934,9 +945,9 @@ class RPhoneDesktopApp : Application() {
 
         val rightPane = VBox(10.0).apply {
             children.addAll(tileGrid)
-            prefWidth = 720.0
-            minWidth = 720.0
-            maxWidth = 720.0
+            prefWidth = 740.0
+            minWidth = 740.0
+            maxWidth = 740.0
         }
 
         val split = HBox(10.0).apply {
@@ -960,10 +971,11 @@ class RPhoneDesktopApp : Application() {
     private fun waveTile(icon: String, title: String, subtitle: String, action: () -> Unit): Node {
         return Button().apply {
             maxWidth = Double.MAX_VALUE
-            minWidth = 0.0
+            minWidth = Double.MAX_VALUE
             prefHeight = 130.0
             isMnemonicParsing = false
             isFocusTraversable = false
+            isWrapText = true
             style = cardStyle()
             graphic = VBox(4.0).apply {
                 alignment = Pos.CENTER
