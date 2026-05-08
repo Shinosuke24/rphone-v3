@@ -69,6 +69,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.rphone.v3.desktop.viewmodel.ProbeViewModel
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -154,15 +155,7 @@ class RPhoneDesktopApp : Application() {
     private var probeActiveMode = "VOLT"
     private var probeSettlingUntilMs = 0L
     private var probePollingJob: Job? = null
-    private var probeHasStartedMeasuring = false
-    private var probeStableDisplay = ""
-    private var probeStableStartMs = 0L
-    private val probeStableDurationMs = 500L
-    private val probeMedianSize = 3
-    private val probeVoltBuffer = ArrayDeque<Double>(5)
-    private val probeDiodeBuffer = ArrayDeque<Double>(5)
-    private val probeOhmBuffer = ArrayDeque<Double>(5)
-    private var probeLastStableOhm = 0.0
+    private lateinit var probeViewModel: ProbeViewModel
     private val probeHistoryPasif = mutableListOf<ProbeHistoryEntry>()
     private val probeHistoryAktif = mutableListOf<ProbeHistoryEntry>()
     private var psuPwmEnabled = false
@@ -292,6 +285,35 @@ class RPhoneDesktopApp : Application() {
             onError = { e -> println("Cloud sync error: ${e.message}") }
         )
         cloudPollingTask?.start()
+
+        // initialize probe viewmodel (parity with APK ProbeViewModel)
+        probeViewModel = ProbeViewModel(storage)
+        probeViewModel.onReadingUpdate = { reading ->
+            Platform.runLater {
+                when (reading.mode) {
+                    ProbeViewModel.Mode.VOLT -> {
+                        probeModeLabel.text = "TEGANGAN"
+                        probeValue.text = reading.valueOnly
+                        probeVoltageLabel.text = reading.display
+                    }
+                    ProbeViewModel.Mode.DIODE -> {
+                        probeModeLabel.text = "DIODA"
+                        probeValue.text = reading.valueOnly
+                        probeDiodeLabel.text = reading.display
+                    }
+                    ProbeViewModel.Mode.OHM -> {
+                        probeModeLabel.text = "OHM"
+                        probeValue.text = reading.valueOnly
+                        probeOhmLabel.text = reading.display
+                    }
+                }
+            }
+        }
+        probeViewModel.onHistoryUpdate = { lines ->
+            Platform.runLater {
+                probeHistoryList.items.setAll(lines)
+            }
+        }
 
         val root = BorderPane().apply {
             style = "-fx-background-color: linear-gradient(to bottom right, #050810, #070D18);"
@@ -1588,8 +1610,8 @@ class RPhoneDesktopApp : Application() {
 
     private fun plainPage(content: VBox): Node {
         content.style = "-fx-background-color: transparent;"
-        content.prefWidth = 1260.0
-        content.maxWidth = 1260.0
+        // allow responsive width when window is resized / maximized
+        content.maxWidth = Double.MAX_VALUE
         return StackPane(content).apply {
             padding = Insets(0.0, 12.0, 12.0, 12.0)
             alignment = Pos.TOP_CENTER
@@ -2028,7 +2050,14 @@ class RPhoneDesktopApp : Application() {
 
                     val modeRaw = extractStringFromJson("mode")
                     val mode = modeRaw?.uppercase()
-                    val isUsbPayload = mode == "USB" || (modeRaw.isNullOrBlank() && jsonText.contains("\"volt\"") && jsonText.contains("\"curr\""))
+                    // Prefer explicit mode field. If missing, treat as USB only when USB-specific keys exist
+                    val hasDp = jsonText.contains("\"dp\"") || jsonText.contains("\"dm\"")
+                    val hasCharge = jsonText.contains("\"charge\"") || jsonText.contains("\"protocol\"")
+                    val isUsbPayload = when {
+                        mode == "USB" -> true
+                        mode == "PSU" -> false
+                        else -> (hasDp || hasCharge) // only classify as USB when USB-specific keys present
+                    }
                     if (isUsbPayload) {
                         val volt = extractDoubleFromJson("volt") ?: lastKnownValue
                         val curr = extractDoubleFromJson("curr") ?: 0.0
@@ -2086,41 +2115,19 @@ class RPhoneDesktopApp : Application() {
                         psuWaveState.addSample(curr, volt, volt * curr)
                         drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple, psuWaveState)
                     } else if (jsonText.contains("\"probe\"")) {
-                        val probeMode = extractStringFromJson("probe") ?: probeActiveMode
-                        if (probeMode.equals("SETTLING", ignoreCase = true)) {
-                            probeSettlingUntilMs = System.currentTimeMillis() + probeCooldownMs(probeActiveMode)
-                            probeValue.text = "---"
-                        } else if (System.currentTimeMillis() >= probeSettlingUntilMs) {
-                            val volt = extractDoubleFromJson("volt") ?: 0.0
-                            val vdrop = extractDoubleFromJson("vdrop") ?: 0.0
-                            val ohm = extractDoubleFromJson("ohm") ?: 0.0
-                            val displayRaw = extractStringFromJson("display") ?: ""
-                            val mappedMode = mapProbeMode(probeMode)
-                            val filtered = filterProbeReading(mappedMode, displayRaw, volt, vdrop, ohm)
-
-                            when (filtered.mode) {
-                                ProbeModeState.VOLT -> {
-                                    probeModeLabel.text = "TEGANGAN"
-                                    probeValue.text = filtered.valueOnly
-                                    probeVoltageLabel.text = filtered.display
+                        // delegate probe parsing and history to ProbeViewModel
+                        probeViewModel.processJson(jsonText)
+                        // optionally persist if device signalled save
+                        val autoSave = Regex("\"auto_save\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE).find(jsonText)?.groups?.get(1)?.value?.equals("true", ignoreCase = true) ?: false
+                        val probeSavedFlag = Regex("\"probe_saved\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE).find(jsonText)?.groups?.get(1)?.value?.equals("true", ignoreCase = true) ?: false
+                        if (autoSave || probeSavedFlag) {
+                            // extract mode for filename
+                            val mode = Regex("\"probe\"\\s*:\\s*\"([^\"]*)\"").find(jsonText)?.groups?.get(1)?.value ?: "VOL"
+                            scope.launch {
+                                val ok = probeViewModel.saveProbeJsonSnapshot(jsonText, mode)
+                                withContext(Dispatchers.Main) {
+                                    if (ok) notification.showSuccess("Probe snapshot saved") else notification.showError("Failed save probe snapshot")
                                 }
-                                ProbeModeState.DIODE -> {
-                                    probeModeLabel.text = "DIODA"
-                                    probeValue.text = filtered.valueOnly
-                                    probeDiodeLabel.text = filtered.display
-                                }
-                                ProbeModeState.OHM -> {
-                                    probeModeLabel.text = "OHM"
-                                    probeValue.text = filtered.valueOnly
-                                    probeOhmLabel.text = filtered.display
-                                }
-                            }
-                            appendProbeHistory(filtered)
-                            // auto-save or history item indicators from device
-                            val autoSave = extractBooleanFromJson("auto_save") ?: false
-                            val probeSavedFlag = extractBooleanFromJson("probe_saved") ?: false
-                            if (autoSave || probeSavedFlag) {
-                                saveProbeJsonSnapshot(jsonText, probeMode)
                             }
                         }
                     } else if (jsonText.contains("\"boot_log_start\"") || jsonText.contains("\"boot_log_end\"")) {
@@ -2977,11 +2984,12 @@ class RPhoneDesktopApp : Application() {
 
         clear()
 
+        val waveRight = (width - 18.0)
         gc.stroke = border
         gc.lineWidth = 1.0
         for (i in 0..10) {
             val y = topPad + (drawH / 10.0) * i
-            gc.strokeLine(waveLeft, y, width - 18.0, y)
+            gc.strokeLine(waveLeft, y, waveRight, y)
         }
         for (i in 0..12) {
             val x = waveLeft + ((waveW - 18.0) / 12.0) * i
@@ -2999,6 +3007,8 @@ class RPhoneDesktopApp : Application() {
 
         gc.stroke = border
         gc.strokeLine(waveLeft, 0.0, waveLeft, height)
+        // draw right boundary so chart area looks enclosed
+        gc.strokeLine(waveRight, 0.0, waveRight, height)
 
         if (maxData < 2) {
             val baseY = height - topPad - 4.0
@@ -3020,6 +3030,32 @@ class RPhoneDesktopApp : Application() {
             val stepX = waveW / (buffer.size - 1).toDouble()
             val baselineY = height - topPad - 4.0
 
+            // build polygon points for subtle fill/shadow under the curve
+            val nPoints = buffer.size + 2
+            val xPoints = DoubleArray(nPoints)
+            val yPoints = DoubleArray(nPoints)
+
+            for (i in 0 until buffer.size) {
+                val x = waveLeft + i * stepX
+                val y = valueToY(buffer[i], ceiling)
+                xPoints[i] = x
+                yPoints[i] = y
+            }
+            // close polygon to baseline (right then left)
+            xPoints[buffer.size] = waveLeft + (buffer.size - 1) * stepX
+            yPoints[buffer.size] = baselineY
+            xPoints[buffer.size + 1] = waveLeft
+            yPoints[buffer.size + 1] = baselineY
+
+            // subtle filled area / shadow under the waveform
+            try {
+                gc.fill = Color.color(color.red, color.green, color.blue, 0.08)
+                gc.fillPolygon(xPoints, yPoints, nPoints)
+            } catch (_: Exception) {
+                // fallback: ignore fill failures on some platforms
+            }
+
+            // stroke path
             gc.beginPath()
             val firstY = valueToY(buffer[0], ceiling)
             gc.moveTo(waveLeft, firstY)
@@ -3036,15 +3072,15 @@ class RPhoneDesktopApp : Application() {
             if (drawStats) {
                 gc.stroke = color
                 gc.lineWidth = 2.0
-                gc.strokeLine(waveLeft, baselineY, width - 18.0, baselineY)
+                gc.strokeLine(waveLeft, baselineY, waveRight, baselineY)
                 val peakY = valueToY(peak, ceiling)
                 val avgY = valueToY(avg, ceiling)
                 gc.stroke = purple
                 gc.lineWidth = 1.2
-                gc.strokeLine(waveLeft, avgY, width - 18.0, avgY)
+                gc.strokeLine(waveLeft, avgY, waveRight, avgY)
                 gc.stroke = red
                 gc.lineWidth = 1.2
-                gc.strokeLine(waveLeft, peakY, width - 18.0, peakY)
+                gc.strokeLine(waveLeft, peakY, waveRight, peakY)
             }
         }
 
