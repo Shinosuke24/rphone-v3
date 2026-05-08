@@ -51,4 +51,53 @@ object SupabaseUploader {
             }
         }
     }
+
+    suspend fun listObjects(prefix: String = ""): String? {
+        return withContext(Dispatchers.IO) {
+            val listUrl = "$SUPABASE_URL/storage/v1/object/list/$BUCKET"
+            val urlWithPrefix = if (prefix.isNotBlank()) "$listUrl?prefix=$prefix" else listUrl
+            val conn = URL(urlWithPrefix).openConnection() as HttpURLConnection
+            try {
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("Authorization", "Bearer $SUPABASE_KEY")
+                conn.setRequestProperty("apikey", SUPABASE_KEY)
+                conn.connectTimeout = 10_000
+                conn.readTimeout = 10_000
+                val code = conn.responseCode
+                if (code in 200..299) {
+                    conn.inputStream.use { it.reader(Charsets.UTF_8).readText() }
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                null
+            } finally {
+                conn.disconnect()
+            }
+        }
+    }
+
+    suspend fun downloadObject(path: String): String? {
+        return withContext(Dispatchers.IO) {
+            val getUrl = "$SUPABASE_URL/storage/v1/object/$BUCKET/$path"
+            val conn = URL(getUrl).openConnection() as HttpURLConnection
+            try {
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("Authorization", "Bearer $SUPABASE_KEY")
+                conn.setRequestProperty("apikey", SUPABASE_KEY)
+                conn.connectTimeout = 10_000
+                conn.readTimeout = 10_000
+                val code = conn.responseCode
+                if (code in 200..299) {
+                    conn.inputStream.use { it.reader(Charsets.UTF_8).readText() }
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                null
+            } finally {
+                conn.disconnect()
+            }
+        }
+    }
 }

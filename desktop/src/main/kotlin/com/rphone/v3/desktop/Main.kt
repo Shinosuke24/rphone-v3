@@ -49,6 +49,8 @@ import javafx.scene.paint.Color
 import javafx.scene.effect.DropShadow
 import javafx.scene.text.Font
 import javafx.stage.Stage
+import javafx.stage.StageStyle
+import javafx.stage.FileChooser
 import javafx.util.StringConverter
 import javafx.animation.KeyFrame
 import javafx.animation.Timeline
@@ -162,7 +164,7 @@ class RPhoneDesktopApp : Application() {
     private val probeHistoryAktif = mutableListOf<ProbeHistoryEntry>()
     private var psuPwmEnabled = false
     private var psuPwmDurationMs = 2000
-    private var psuOcpStatus = "OFF"
+    private var psuOcpStatus = "ON"
     private var waveModeFilter = "ALL"
     private var uartCustomRules = mutableListOf<String>()
     private val waveIndexFileName = "wave_profiles_index.json"
@@ -295,14 +297,20 @@ class RPhoneDesktopApp : Application() {
             center = buildMainArea()
         }
 
+        // hide native title bar to avoid duplicate window controls
+        stage.initStyle(StageStyle.UNDECORATED)
         stage.title = "R-Phone V3 Desktop"
         stage.width = 1280.0
         stage.height = 800.0
-        stage.minWidth = 1200.0
-        stage.minHeight = 720.0
+        // allow maximizing and smaller minimum so users can expand to full screen
+        stage.minWidth = 900.0
+        stage.minHeight = 600.0
         stage.isMaximized = false
         stage.scene = Scene(root)
         stage.show()
+
+        // make custom top bar draggable
+        makeWindowDraggable(stage, root)
 
         refreshDevices()
         selectPage(DesktopPage.USB)
@@ -357,6 +365,20 @@ class RPhoneDesktopApp : Application() {
                 maximizeBtn,
                 closeBtn
             )
+        }
+    }
+
+    private fun makeWindowDraggable(stage: Stage, root: BorderPane) {
+        // allow dragging the undecorated window by the top bar area
+        var dragX = 0.0
+        var dragY = 0.0
+        root.top?.addEventHandler(MouseEvent.MOUSE_PRESSED) { ev ->
+            dragX = ev.screenX - stage.x
+            dragY = ev.screenY - stage.y
+        }
+        root.top?.addEventHandler(MouseEvent.MOUSE_DRAGGED) { ev ->
+            stage.x = ev.screenX - dragX
+            stage.y = ev.screenY - dragY
         }
     }
 
@@ -580,7 +602,7 @@ class RPhoneDesktopApp : Application() {
         psuMetricVoltage = metricValue("0.000", textPrimary)
         psuMetricPower = metricValue("0.00", purple)
         psuMetricCapacity = metricValue("--", textSecondary)
-        psuMetricOcp = metricValue("OFF", red)
+        psuMetricOcp = metricValue("ON", green)
 
         psuChartCanvas = Canvas(700.0, 320.0)
         psuChartCanvas.widthProperty().addListener { _, _, _ -> drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple, psuWaveState) }
@@ -600,7 +622,7 @@ class RPhoneDesktopApp : Application() {
             }
         }
         psuOcpButton = Button("OCP OFF").apply {
-            style = activePsuButtonStyle(false, red)
+            style = activePsuButtonStyle(psuOcpStatus == "ON", red)
             setOnAction {
                 when (psuOcpStatus) {
                     "TRIP" -> {
@@ -692,9 +714,15 @@ class RPhoneDesktopApp : Application() {
 
     private fun buildProbePage(): Node {
         probeValue = label("0.000", amber, 44.0, true).apply {
+            style += "-fx-font-family: 'Digital-7', 'DS-Digital', 'Consolas';"
             font = Font.font("Consolas", 44.0)
+            maxWidth = Double.MAX_VALUE
+            alignment = Pos.CENTER
         }
-        probeModeLabel = label("TEGANGAN", muted, 11.0, true)
+        probeModeLabel = label("TEGANGAN", muted, 11.0, true).apply {
+            maxWidth = Double.MAX_VALUE
+            alignment = Pos.CENTER
+        }
         probeVoltageLabel = label("0.000 V", green, 13.0, false)
         probeDiodeLabel = label("0.000 V", green, 13.0, false)
         probeOhmLabel = label("0.0 Ω", green, 13.0, false)
@@ -800,7 +828,7 @@ class RPhoneDesktopApp : Application() {
             hgap = 10.0
             vgap = 10.0
             add(waveTile("🗂", "Rekam Baru", "Rekam arus boot HP") { sendCommand("BUZZ_REKAM_BARU"); recordWaveProfile() }, 0, 0)
-            add(waveTile("📁", "Database", "Lihat profil tersimpan") { sendCommand("BUZZ_BUKA_DB"); loadWaveFiles() }, 1, 0)
+            add(waveTile("📁", "Database", "Lihat profil tersimpan") { sendCommand("BUZZ_BUKA_DB"); syncWaveDatabase(); loadWaveFiles() }, 1, 0)
             add(waveTile("◫", "Bandingkan", "Overlay 2 waveform") { sendCommand("BUZZ_BANDINGKAN"); compareLatestWaveProfiles() }, 0, 1)
             add(waveTile("📥", "Import .rphp", "Tambah dari komunitas") { sendCommand("BUZZ_IMPORT"); importWaveLog() }, 1, 1)
         }
@@ -1158,7 +1186,8 @@ class RPhoneDesktopApp : Application() {
                     toggleGroup = group
                     isSelected = index == 0
                     maxWidth = Double.MAX_VALUE
-                    prefWidth = 88.0
+                    prefWidth = 110.0
+                    alignment = Pos.CENTER
                     style = tabStyle(def.accent, index == 0)
                     selectedProperty().addListener { _, _, selected ->
                         style = tabStyle(def.accent, selected)
@@ -1194,7 +1223,8 @@ class RPhoneDesktopApp : Application() {
                         toggleGroup = group
                         isSelected = state.activeChannel == channel
                         maxWidth = Double.MAX_VALUE
-                        prefWidth = 88.0
+                        prefWidth = 110.0
+                        alignment = Pos.CENTER
                         style = tabStyle(accent, isSelected)
                         selectedProperty().addListener { _, _, selected ->
                             style = tabStyle(accent, selected)
@@ -1727,8 +1757,9 @@ class RPhoneDesktopApp : Application() {
                     }
                     appendConsole("RX_JSON", jsonText)
 
-                    val mode = extractStringFromJson("mode")
-                    val isUsbPayload = mode == "USB" || (mode.isNullOrBlank() && jsonText.contains("\"volt\"") && jsonText.contains("\"curr\""))
+                    val modeRaw = extractStringFromJson("mode")
+                    val mode = modeRaw?.uppercase()
+                    val isUsbPayload = mode == "USB" || (modeRaw.isNullOrBlank() && jsonText.contains("\"volt\"") && jsonText.contains("\"curr\""))
                     if (isUsbPayload) {
                         val volt = extractDoubleFromJson("volt") ?: lastKnownValue
                         val curr = extractDoubleFromJson("curr") ?: 0.0
@@ -2098,17 +2129,18 @@ class RPhoneDesktopApp : Application() {
     }
 
     private fun importWaveLog() {
+        // Desktop: show a file chooser so user can pick .rphp files from any directory
+        val chooser = FileChooser()
+        chooser.title = "Import .rphp files"
+        chooser.extensionFilters.add(FileChooser.ExtensionFilter("RPHP files", "*.rphp"))
+        val selections = chooser.showOpenMultipleDialog(null)
+        if (selections == null || selections.isEmpty()) {
+            notification.showMessage("No files selected for import")
+            return
+        }
         scope.launch {
-            val downloads = File(System.getProperty("user.home"), "Downloads")
-            val matches = downloads.listFiles { f -> f.isFile && f.extension.equals("rphp", true) }?.toList() ?: emptyList()
-            if (matches.isEmpty()) {
-                withContext(Dispatchers.Main) {
-                    notification.showMessage("No .rphp files found in Downloads to import")
-                }
-                return@launch
-            }
             var imported = 0
-            for (f in matches) {
+            for (f in selections) {
                 try {
                     val content = f.readText()
                     val ok = storage.save(f.name, content)
@@ -2142,14 +2174,69 @@ class RPhoneDesktopApp : Application() {
         }
     }
 
+    private fun syncWaveDatabase() {
+        scope.launch {
+            try {
+                val listJson = SupabaseUploader.listObjects("WAVE")
+                if (listJson.isNullOrBlank()) {
+                    withContext(Dispatchers.Main) {
+                        notification.showMessage("Cloud sync: no data or failed to list objects")
+                    }
+                    return@launch
+                }
+                // crude parse: look for name fields or filenames in returned JSON
+                val names = Regex("\"name\"\s*:\s*\"([^\"]+)\"").findAll(listJson).mapNotNull { it.groups[1]?.value }.toList()
+                var imported = 0
+                for (n in names) {
+                    if (!n.endsWith(".rphp", true)) continue
+                    val remotePath = if (n.startsWith("WAVE/")) n else "WAVE/$n"
+                    val content = SupabaseUploader.downloadObject(remotePath)
+                    if (content != null) {
+                        val fname = if (n.contains('/')) n.substringAfterLast('/') else n
+                        val ok = storage.save(fname, content)
+                        if (ok) {
+                            upsertWaveIndex(
+                                filename = fname,
+                                label = fname.removeSuffix(".rphp"),
+                                mode = "PSU",
+                                source = "cloud",
+                                sizeBytes = content.toByteArray(Charsets.UTF_8).size.toLong()
+                            )
+                            imported++
+                        }
+                    }
+                }
+                withContext(Dispatchers.Main) {
+                    if (imported > 0) notification.showSuccess("Synced $imported profiles from cloud") else notification.showMessage("No remote profiles found or sync failed")
+                    refreshFileLists()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { notification.showError("Cloud sync failed: ${e.message}") }
+            }
+        }
+    }
+
     private fun saveUartLog() {
         scope.launch {
-            val filename = "uart-log-${LocalTime.now().format(DateTimeFormatter.ofPattern("HHmmss"))}.txt"
-            val ok = storage.save(filename, uartConsole.text)
+            val base = "uart-log-${LocalTime.now().format(DateTimeFormatter.ofPattern("HHmmss"))}"
+            val txtName = "$base.txt"
+            val htmlName = "$base.html"
+            val textOk = storage.save(txtName, uartConsole.text)
+            // also save a dark-themed HTML copy for better reading
+            val html = buildString {
+                appendLine("<html><head><meta charset=\"utf-8\"><title>$base</title>")
+                appendLine("<style>body{background:#050810;color:#E2E8F0;font-family:monospace;padding:12px;}pre{white-space:pre-wrap;word-break:break-word;}</style>")
+                appendLine("</head><body>")
+                appendLine("<pre>")
+                append(uartConsole.text)
+                appendLine("</pre>")
+                appendLine("</body></html>")
+            }
+            val htmlOk = storage.save(htmlName, html)
             withContext(Dispatchers.Main) {
-                if (ok) {
+                if (textOk || htmlOk) {
                     refreshFileLists()
-                    notification.showSuccess("UART log tersimpan: $filename")
+                    notification.showSuccess("UART log tersimpan: $txtName (HTML dark copy: $htmlName)")
                 } else {
                     notification.showError("Gagal menyimpan UART log")
                 }
@@ -2905,7 +2992,8 @@ class RPhoneDesktopApp : Application() {
 
     private fun metricValue(text: String, color: Color): Label {
         return label(text, color, 28.0, true).apply {
-            style += "-fx-font-family: 'Consolas';"
+            // prefer a 7-seg / digital font when available; fallback to Consolas
+            style += "-fx-font-family: 'Digital-7', 'DS-Digital', 'Consolas';"
             // allow the numeric label to expand and avoid ellipsis
             maxWidth = Double.MAX_VALUE
             isWrapText = false
