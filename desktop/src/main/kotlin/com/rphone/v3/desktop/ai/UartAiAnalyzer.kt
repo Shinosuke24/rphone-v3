@@ -225,4 +225,24 @@ Aturan:
             else -> "No critical issues. Device appears normal. ✓ LOW"
         }
     }
+
+    suspend fun analisa(input: AnalysisInput): Result<String> {
+        val cfg = AiConfigStore.load()
+        val provider = cfg.provider.lowercase()
+
+        val prompt = if (input.systemPrompt.isBlank()) {
+            input.userMessage
+        } else {
+            "${input.systemPrompt}\n\n${input.userMessage}"
+        }
+
+        return when (provider) {
+            "claude" -> ClaudeAnalyzer.analisa(prompt)
+            "groq" -> GroqAnalyzer.analisa(prompt)
+            "gemini" -> GeminiAnalyzer.analisa(prompt)
+            "litellm", "litellm".lowercase() ->
+                LiteLLMAnalyzer.analisa(input.systemPrompt, input.userMessage)
+            else -> LiteLLMAnalyzer.analisa(input.systemPrompt, input.userMessage)
+        }
+    }
 }
