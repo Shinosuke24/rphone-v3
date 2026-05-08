@@ -1,8 +1,6 @@
 package com.rphone.v3.desktop.viewmodel
 
 import com.rphone.v3.core.platform.FileStorage
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
 import javafx.application.Platform
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -191,7 +189,7 @@ class ProbeViewModel(private val storage: FileStorage) {
         }
     }
 
-    fun saveProbeJsonSnapshot(jsonText: String, mode: String): Boolean {
+    suspend fun saveProbeJsonSnapshot(jsonText: String, mode: String): Boolean {
         return try {
             val modePrefix = when (mode.uppercase()) {
                 "DIODE" -> "DIO"
@@ -200,11 +198,7 @@ class ProbeViewModel(private val storage: FileStorage) {
                 else -> "VOL"
             }
             val filename = "probe-${modePrefix}-${java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HHmmss"))}.json"
-            // Fire-and-forget async save to avoid blocking
-            GlobalScope.launch {
-                storage.save(filename, jsonText)
-            }
-            true
+            storage.save(filename, jsonText)
         } catch (_: Exception) {
             false
         }
