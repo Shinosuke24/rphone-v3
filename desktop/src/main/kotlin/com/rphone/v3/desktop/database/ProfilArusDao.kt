@@ -37,39 +37,41 @@ class ProfilArusDao(private val dbPath: String) {
         """.trimIndent()
 
         getConnection().use { conn ->
-            conn.prepareStatement(sql).use { stmt ->
+            conn.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS).use { stmt ->
                 stmt.setString(1, profil.brand)
                 stmt.setString(2, profil.model)
                 stmt.setString(3, profil.kondisi)
                 stmt.setString(4, profil.username)
-                stmt.setString(5, profil.tanggal)
+                stmt.setLong(5, profil.tanggal)
                 stmt.setLong(6, profil.durasiMs)
-                stmt.setDouble(7, profil.tegangan)
-                stmt.setDouble(8, profil.puncakArus)
-                stmt.setDouble(9, profil.rataArus)
-                stmt.setDouble(10, profil.minArus)
-                stmt.setDouble(11, profil.puncakDaya)
+                stmt.setFloat(7, profil.tegangan)
+                stmt.setFloat(8, profil.puncakArus)
+                stmt.setFloat(9, profil.rataArus)
+                stmt.setFloat(10, profil.minArus)
+                stmt.setFloat(11, profil.puncakDaya)
                 stmt.setString(12, profil.waveformJson)
                 stmt.setString(13, profil.faseJson)
-                stmt.setDouble(14, profil.puncakVolt)
-                stmt.setDouble(15, profil.avgVolt)
+                stmt.setFloat(14, profil.puncakVolt)
+                stmt.setFloat(15, profil.avgVolt)
                 stmt.setString(16, profil.voltWaveformJson)
-                stmt.setDouble(17, profil.dpAvg)
-                stmt.setDouble(18, profil.dmAvg)
-                stmt.setDouble(19, profil.puncakDp)
-                stmt.setDouble(20, profil.avgDp)
-                stmt.setDouble(21, profil.puncakDm)
-                stmt.setDouble(22, profil.avgDm)
+                stmt.setFloat(17, profil.dpAvg)
+                stmt.setFloat(18, profil.dmAvg)
+                stmt.setFloat(19, profil.puncakDp)
+                stmt.setFloat(20, profil.avgDp)
+                stmt.setFloat(21, profil.puncakDm)
+                stmt.setFloat(22, profil.avgDm)
                 stmt.setString(23, profil.dpWaveformJson)
                 stmt.setString(24, profil.dmWaveformJson)
                 stmt.setString(25, profil.sumber)
                 stmt.setString(26, profil.namaFile)
                 stmt.setString(27, profil.modeRekam)
                 stmt.setString(28, profil.namaKonektor)
+
                 stmt.executeUpdate()
 
-                val rs = stmt.generatedKeys
-                return if (rs.next()) rs.getLong(1) else 0L
+                stmt.generatedKeys.use { keys ->
+                    return if (keys.next()) keys.getLong(1) else 0L
+                }
             }
         }
     }
@@ -93,40 +95,32 @@ class ProfilArusDao(private val dbPath: String) {
                 stmt.setString(2, profil.model)
                 stmt.setString(3, profil.kondisi)
                 stmt.setString(4, profil.username)
-                stmt.setString(5, profil.tanggal)
+                stmt.setLong(5, profil.tanggal)
                 stmt.setLong(6, profil.durasiMs)
-                stmt.setDouble(7, profil.tegangan)
-                stmt.setDouble(8, profil.puncakArus)
-                stmt.setDouble(9, profil.rataArus)
-                stmt.setDouble(10, profil.minArus)
-                stmt.setDouble(11, profil.puncakDaya)
+                stmt.setFloat(7, profil.tegangan)
+                stmt.setFloat(8, profil.puncakArus)
+                stmt.setFloat(9, profil.rataArus)
+                stmt.setFloat(10, profil.minArus)
+                stmt.setFloat(11, profil.puncakDaya)
                 stmt.setString(12, profil.waveformJson)
                 stmt.setString(13, profil.faseJson)
-                stmt.setDouble(14, profil.puncakVolt)
-                stmt.setDouble(15, profil.avgVolt)
+                stmt.setFloat(14, profil.puncakVolt)
+                stmt.setFloat(15, profil.avgVolt)
                 stmt.setString(16, profil.voltWaveformJson)
-                stmt.setDouble(17, profil.dpAvg)
-                stmt.setDouble(18, profil.dmAvg)
-                stmt.setDouble(19, profil.puncakDp)
-                stmt.setDouble(20, profil.avgDp)
-                stmt.setDouble(21, profil.puncakDm)
-                stmt.setDouble(22, profil.avgDm)
+                stmt.setFloat(17, profil.dpAvg)
+                stmt.setFloat(18, profil.dmAvg)
+                stmt.setFloat(19, profil.puncakDp)
+                stmt.setFloat(20, profil.avgDp)
+                stmt.setFloat(21, profil.puncakDm)
+                stmt.setFloat(22, profil.avgDm)
                 stmt.setString(23, profil.dpWaveformJson)
                 stmt.setString(24, profil.dmWaveformJson)
                 stmt.setString(25, profil.sumber)
                 stmt.setString(26, profil.namaFile)
                 stmt.setString(27, profil.modeRekam)
-                stmt.setLong(28, profil.id)
-                stmt.executeUpdate()
-            }
-        }
-    }
+                stmt.setString(28, profil.namaKonektor)
+                stmt.setLong(29, profil.id)
 
-    fun delete(id: Long) {
-        val sql = "DELETE FROM profil_arus WHERE id = ?"
-        getConnection().use { conn ->
-            conn.prepareStatement(sql).use { stmt ->
-                stmt.setLong(1, id)
                 stmt.executeUpdate()
             }
         }
@@ -287,6 +281,16 @@ class ProfilArusDao(private val dbPath: String) {
         }
     }
 
+    fun delete(id: Long) {
+        val sql = "DELETE FROM profil_arus WHERE id = ?"
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setLong(1, id)
+                stmt.executeUpdate()
+            }
+        }
+    }
+
     private fun rowToProfilArus(rs: ResultSet): ProfilArus {
         return ProfilArus(
             id = rs.getLong("id"),
@@ -294,24 +298,24 @@ class ProfilArusDao(private val dbPath: String) {
             model = rs.getString("model") ?: "",
             kondisi = rs.getString("kondisi") ?: "",
             username = rs.getString("username") ?: "Unknown",
-            tanggal = rs.getString("tanggal") ?: "",
+            tanggal = rs.getLong("tanggal"),
             durasiMs = rs.getLong("durasi_ms"),
-            tegangan = rs.getDouble("tegangan"),
-            puncakArus = rs.getDouble("puncak_arus"),
-            rataArus = rs.getDouble("rata_arus"),
-            minArus = rs.getDouble("min_arus"),
-            puncakDaya = rs.getDouble("puncak_daya"),
+            tegangan = rs.getFloat("tegangan"),
+            puncakArus = rs.getFloat("puncak_arus"),
+            rataArus = rs.getFloat("rata_arus"),
+            minArus = rs.getFloat("min_arus"),
+            puncakDaya = rs.getFloat("puncak_daya"),
             waveformJson = rs.getString("waveform_json") ?: "[]",
             faseJson = rs.getString("fase_json") ?: "[]",
-            puncakVolt = rs.getDouble("puncak_volt"),
-            avgVolt = rs.getDouble("avg_volt"),
+            puncakVolt = rs.getFloat("puncak_volt"),
+            avgVolt = rs.getFloat("avg_volt"),
             voltWaveformJson = rs.getString("volt_waveform_json") ?: "[]",
-            dpAvg = rs.getDouble("dp_avg"),
-            dmAvg = rs.getDouble("dm_avg"),
-            puncakDp = rs.getDouble("puncak_dp"),
-            avgDp = rs.getDouble("avg_dp"),
-            puncakDm = rs.getDouble("puncak_dm"),
-            avgDm = rs.getDouble("avg_dm"),
+            dpAvg = rs.getFloat("dp_avg"),
+            dmAvg = rs.getFloat("dm_avg"),
+            puncakDp = rs.getFloat("puncak_dp"),
+            avgDp = rs.getFloat("avg_dp"),
+            puncakDm = rs.getFloat("puncak_dm"),
+            avgDm = rs.getFloat("avg_dm"),
             dpWaveformJson = rs.getString("dp_waveform_json") ?: "[]",
             dmWaveformJson = rs.getString("dm_waveform_json") ?: "[]",
             sumber = rs.getString("sumber") ?: "MANUAL",

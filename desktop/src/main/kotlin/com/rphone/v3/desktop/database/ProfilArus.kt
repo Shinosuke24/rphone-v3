@@ -14,32 +14,32 @@ data class ProfilArus(
     var model: String = "",
     var kondisi: String = "", // kondisi = condition (OK, RUSAK, etc)
     var username: String = "Unknown",
-    var tanggal: String = "", // ISO 8601 format: 2026-05-08T14:30:00
+    var tanggal: Long = 0L, // Unix timestamp millis (same as APK)
     var durasiMs: Long = 0,
     
     // USB mode: current/voltage/power
-    var tegangan: Double = 0.0, // voltage
-    var puncakArus: Double = 0.0, // peak current
-    var rataArus: Double = 0.0, // average current
-    var minArus: Double = 0.0, // minimum current
-    var puncakDaya: Double = 0.0, // peak power
+    var tegangan: Float = 0.0f, // voltage (Float for APK parity)
+    var puncakArus: Float = 0.0f, // peak current
+    var rataArus: Float = 0.0f, // average current
+    var minArus: Float = 0.0f, // minimum current
+    var puncakDaya: Float = 0.0f, // peak power
     
     // Waveforms (JSON arrays)
     var waveformJson: String = "[]", // current waveform
     var faseJson: String = "[]", // phase/metadata
     
     // PSU mode fields
-    var puncakVolt: Double = 0.0,
-    var avgVolt: Double = 0.0,
+    var puncakVolt: Float = 0.0f,
+    var avgVolt: Float = 0.0f,
     var voltWaveformJson: String = "[]",
     
     // USB multi-channel (D+/D-)
-    var dpAvg: Double = 0.0,
-    var dmAvg: Double = 0.0,
-    var puncakDp: Double = 0.0,
-    var avgDp: Double = 0.0,
-    var puncakDm: Double = 0.0,
-    var avgDm: Double = 0.0,
+    var dpAvg: Float = 0.0f,
+    var dmAvg: Float = 0.0f,
+    var puncakDp: Float = 0.0f,
+    var avgDp: Float = 0.0f,
+    var puncakDm: Float = 0.0f,
+    var avgDm: Float = 0.0f,
     var dpWaveformJson: String = "[]",
     var dmWaveformJson: String = "[]",
     
@@ -50,43 +50,61 @@ data class ProfilArus(
     var namaKonektor: String = "" // connector name for save dialog
 ) {
     fun isValid(): Boolean {
-        return brand.isNotBlank() && model.isNotBlank() && kondisi.isNotBlank() &&
-            !waveformJson.isEmpty() && waveformJson != "[]"
-    }
-
-    fun getWaveformArray(): List<Double> {
-        return try {
-            Gson().fromJson(waveformJson, Array<Double>::class.java).toList()
-        } catch (e: Exception) {
-            emptyList()
+        if (brand.isBlank() || model.isBlank() || kondisi.isBlank()) return false
+        // follow APK: if modeRekam == "USB" require waveformJson non-empty
+        return if (modeRekam.equals("USB", ignoreCase = true)) {
+            waveformJson.isNotEmpty() && waveformJson != "[]"
+        } else {
+            true
         }
     }
 
-    fun setWaveformArray(data: List<Double>) {
+    fun getWaveformArray(): List<Float> {
+        return try {
+            Gson().fromJson(waveformJson, Array<Float>::class.java).toList()
+        } catch (e: Exception) {
+            // try legacy Double parsing and convert
+            try {
+                Gson().fromJson(waveformJson, Array<Double>::class.java).map { it.toFloat() }
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+    }
+
+    fun setWaveformArray(data: List<Float>) {
         waveformJson = Gson().toJson(data)
     }
 
-    fun getDpWaveformArray(): List<Double> {
+    fun getDpWaveformArray(): List<Float> {
         return try {
-            Gson().fromJson(dpWaveformJson, Array<Double>::class.java).toList()
+            Gson().fromJson(dpWaveformJson, Array<Float>::class.java).toList()
         } catch (e: Exception) {
-            emptyList()
+            try {
+                Gson().fromJson(dpWaveformJson, Array<Double>::class.java).map { it.toFloat() }
+            } catch (_: Exception) {
+                emptyList()
+            }
         }
     }
 
-    fun setDpWaveformArray(data: List<Double>) {
+    fun setDpWaveformArray(data: List<Float>) {
         dpWaveformJson = Gson().toJson(data)
     }
 
-    fun getDmWaveformArray(): List<Double> {
+    fun getDmWaveformArray(): List<Float> {
         return try {
-            Gson().fromJson(dmWaveformJson, Array<Double>::class.java).toList()
+            Gson().fromJson(dmWaveformJson, Array<Float>::class.java).toList()
         } catch (e: Exception) {
-            emptyList()
+            try {
+                Gson().fromJson(dmWaveformJson, Array<Double>::class.java).map { it.toFloat() }
+            } catch (_: Exception) {
+                emptyList()
+            }
         }
     }
 
-    fun setDmWaveformArray(data: List<Double>) {
+    fun setDmWaveformArray(data: List<Float>) {
         dmWaveformJson = Gson().toJson(data)
     }
 
@@ -123,17 +141,18 @@ data class ProfilArus(
                 model = model,
                 kondisi = kondisi,
                 username = username,
-                tanggal = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
-                tegangan = voltage,
-                puncakArus = peakCurrent,
-                rataArus = avgCurrent,
-                minArus = minCurrent,
-                puncakDaya = peakPower,
+                tanggal = System.currentTimeMillis(),
+                tegangan = voltage.toFloat(),
+                puncakArus = peakCurrent.toFloat(),
+                rataArus = avgCurrent.toFloat(),
+                minArus = minCurrent.toFloat(),
+                puncakDaya = peakPower.toFloat(),
                 modeRekam = modeRekam,
                 namaKonektor = namaKonektor,
                 sumber = "MANUAL"
             )
-            profil.setWaveformArray(waveform)
+            // convert incoming Double waveform to Float list for storage
+            profil.setWaveformArray(waveform.map { it.toFloat() })
             return profil
         }
     }

@@ -2185,7 +2185,7 @@ class RPhoneDesktopApp : Application() {
                     return@launch
                 }
                 // crude parse: look for name fields or filenames in returned JSON
-                val names = Regex("\"name\"\s*:\s*\"([^\"]+)\"").findAll(listJson).mapNotNull { it.groups[1]?.value }.toList()
+                val names = Regex("\"name\"\\s*:\\s*\"([^\\\"]+)\"").findAll(listJson).mapNotNull { it.groups[1]?.value }.toList()
                 var imported = 0
                 for (n in names) {
                     if (!n.endsWith(".rphp", true)) continue
@@ -2324,7 +2324,11 @@ class RPhoneDesktopApp : Application() {
             val profiles = waveIdManager.getProfilesByMode(waveModeFilter.ifEmpty { "USB" })
             val filteredCount = profiles.size
             val displayLines = profiles.sortedByDescending { it.tanggal }.map { profil ->
-                "${profil.brand} ${profil.model} | ${profil.kondisi} | ${profil.tanggal?.take(10) ?: "N/A"}"
+                val dateStr = try {
+                    if (profil.tanggal > 0) java.time.Instant.ofEpochMilli(profil.tanggal)
+                        .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString() else "N/A"
+                } catch (e: Exception) { "N/A" }
+                "${profil.brand} ${profil.model} | ${profil.kondisi} | $dateStr"
             }
             withContext(Dispatchers.Main) {
                 waveHistoryList.items.setAll(displayLines)
@@ -2355,9 +2359,9 @@ class RPhoneDesktopApp : Application() {
 
             val referenceProfiles = profiles.drop(1)
             val matches = waveIdManager.compareWaveforms(
-                queryWaveform,
-                queryProfile.puncakArus,
-                queryProfile.rataArus,
+                queryWaveform.map { it.toDouble() },
+                queryProfile.puncakArus.toDouble(),
+                queryProfile.rataArus.toDouble(),
                 referenceProfiles
             )
 

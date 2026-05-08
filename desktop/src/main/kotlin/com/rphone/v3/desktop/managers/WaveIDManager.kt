@@ -32,7 +32,7 @@ class WaveIDManager(private val dbPath: String = "${System.getProperty("user.hom
 
     // Save new profile
     fun saveProfile(profil: ProfilArus): Long {
-        profil.tanggal = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+        profil.tanggal = System.currentTimeMillis()
         return dao.insert(profil)
     }
 
