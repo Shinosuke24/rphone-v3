@@ -22,9 +22,13 @@ class ProbeViewModel(private val storage: FileStorage) {
 
     var onReadingUpdate: ((ProbeReading) -> Unit)? = null
     var onHistoryUpdate: ((List<String>) -> Unit)? = null
+    var onSendCommand: ((String) -> Unit)? = null
 
     private val probeMedianSize = 3
     private val probeStableDurationMs = 500L
+    private val probePollIntervalMs = 150L
+    private var pollingThread: Thread? = null
+    private var isPolling = false
     private val probeVoltBuffer = ArrayDeque<Double>(5)
     private val probeDiodeBuffer = ArrayDeque<Double>(5)
     private val probeOhmBuffer = ArrayDeque<Double>(5)
@@ -199,4 +203,43 @@ class ProbeViewModel(private val storage: FileStorage) {
             false
         }
     }
+
+    /**
+     * Start polling periodically (parity with APK ProbeViewModel.startPolling).
+     * Sends GET_VOLT / GET_DIODE / GET_OHM commands every 150ms.
+     */
+    fun startPolling() {
+        if (isPolling) return
+        isPolling = true
+        pollingThread = Thread {
+            while (isPolling) {
+                try {
+                    // Determine current mode and send appropriate poll command
+                    val pollCmd = when {
+                        probeVoltBuffer.isNotEmpty() -> "GET_VOLT"
+                        probeDiodeBuffer.isNotEmpty() -> "GET_DIODE"
+                        probeOhmBuffer.isNotEmpty() -> "GET_OHM"
+                        else -> "GET_VOLT" // default mode
+                    }
+                    onSendCommand?.invoke(pollCmd)
+                    Thread.sleep(probePollIntervalMs)
+                } catch (e: InterruptedException) {
+                    break
+                } catch (_: Exception) {
+                    // swallow
+                }
+            }
+        }
+        pollingThread?.start()
+    }
+
+    /**
+     * Stop polling (parity with APK ProbeViewModel.stopPolling).
+     */
+    fun stopPolling() {
+        isPolling = false
+        pollingThread?.interrupt()
+        pollingThread = null
+    }
 }
+

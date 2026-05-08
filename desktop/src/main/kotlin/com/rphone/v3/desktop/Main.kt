@@ -288,6 +288,7 @@ class RPhoneDesktopApp : Application() {
 
         // initialize probe viewmodel (parity with APK ProbeViewModel)
         probeViewModel = ProbeViewModel(storage)
+        probeViewModel.onSendCommand = { cmd -> sendCommand(cmd) }
         probeViewModel.onReadingUpdate = { reading ->
             Platform.runLater {
                 when (reading.mode) {
@@ -796,7 +797,11 @@ class RPhoneDesktopApp : Application() {
                     )
                 }),
                 actionButtonsRow(
-                    primaryActionButton("MULAI ANALISA", amber) { sendCommands("PROBE_ANALYZE", "BUZZ_MULAI_ANALISA") },
+                    primaryActionButton("MULAI ANALISA", amber) { 
+                        // Start actual probe analysis/polling (parity with APK ProbeViewModel)
+                        probeViewModel.startPolling()
+                        sendCommand("BUZZ_MULAI_ANALISA")
+                    },
                     secondaryActionButton("SIMPAN DATA", amber) { saveProbeSnapshot() },
                     secondaryActionButton("COMPARE", purple) { selectPage(DesktopPage.WAVEID) }
                 )
@@ -1643,10 +1648,22 @@ class RPhoneDesktopApp : Application() {
         pageHost.children.setAll(pageNodes.getValue(page))
         if (page == DesktopPage.PROBE) {
             if (serial.isConnected()) {
-                switchProbeMode(probeActiveMode)
+                // Send relay command to switch probe mode
+                val relayCmd = when (probeActiveMode.uppercase()) {
+                    "DIODE" -> "SET_PROBE_DIODE"
+                    "OHM" -> "SET_PROBE_OHM"
+                    else -> "SET_PROBE_VOLT"
+                }
+                sendCommand(relayCmd)
+                // Give firmware time to settle (200-250ms), then start polling
+                scope.launch {
+                    kotlinx.coroutines.delay(200L)
+                    probeViewModel.startPolling()
+                }
             }
         } else {
-            stopProbePolling()
+            // Stop polling when leaving probe page
+            probeViewModel.stopPolling()
         }
         navButtons.forEach { (navPage, button) ->
             val accent = if (navPage == page) {
