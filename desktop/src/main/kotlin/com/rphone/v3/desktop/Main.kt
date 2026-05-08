@@ -11,6 +11,7 @@ import com.rphone.v3.desktop.platform.DesktopSerialConnection
 import com.rphone.v3.desktop.tts.DesktopTtsManager
 import com.rphone.v3.desktop.scheduler.BackgroundTaskScheduler
 import com.rphone.v3.desktop.scheduler.SupabaseCloudPollingTask
+import com.google.gson.JsonParser
 import javafx.application.Application
 import javafx.application.Platform
 import javafx.beans.value.ChangeListener
@@ -58,6 +59,8 @@ import javafx.util.Duration
 import javafx.scene.input.MouseEvent
 import javafx.scene.control.ToggleGroup
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -964,6 +967,11 @@ class RPhoneDesktopApp : Application() {
         }
         val aiApiKey = TextField().apply { promptText = "API Key"; style = controlStyle() }
         val aiBaseUrl = TextField().apply { promptText = "Base URL (liteLLM only)"; style = controlStyle() }
+        val aiModelCombo = ComboBox<String>(FXCollections.observableArrayList()).apply {
+            promptText = "Model"
+            style = comboStyle()
+            maxWidth = Double.MAX_VALUE
+        }
         settingsUsernameField = TextField().apply { promptText = "Nama teknisi (username)"; style = controlStyle() }
 
         val dtwSlider = Slider(90.0, 100.0, 100.0).apply {
@@ -980,6 +988,124 @@ class RPhoneDesktopApp : Application() {
             val showBaseUrl = aiCombo.value == "liteLLM"
             aiBaseUrl.isVisible = showBaseUrl
             aiBaseUrl.isManaged = showBaseUrl
+            aiModelCombo.isDisable = false
+        }
+
+        fun defaultModelsForProvider(provider: String): List<String> {
+            return when (provider.lowercase()) {
+                "groq" -> listOf(
+                    "llama-3.3-70b-versatile",
+                    "llama-3.1-8b-instant",
+                    "gemma2-9b-it"
+                )
+                "gemini" -> listOf(
+                    "gemini-1.5-flash",
+                    "gemini-1.5-pro",
+                    "gemini-2.0-flash"
+                )
+                "claude" -> listOf(
+                    "claude-3-5-sonnet-20241022",
+                    "claude-3-5-haiku-20241022",
+                    "claude-3-opus-20240229"
+                )
+                else -> emptyList()
+            }
+        }
+
+        fun populateModelChoices(models: List<String>, preferred: String? = null) {
+            val filtered = models.distinct().filter { it.isNotBlank() }
+            aiModelCombo.items.setAll(filtered)
+            val selection = preferred?.takeIf { it in filtered }
+                ?: filtered.firstOrNull()
+            if (selection != null) {
+                aiModelCombo.value = selection
+            }
+        }
+
+        fun parseModelIds(response: String): List<String> {
+            return try {
+                val root = JsonParser.parseString(response).asJsonObject
+                val data = root.getAsJsonArray("data") ?: return emptyList()
+                data.mapNotNull { element ->
+                    val obj = element.asJsonObject
+                    when {
+                        obj.has("id") -> obj.get("id").asString
+                        obj.has("name") -> obj.get("name").asString.substringAfterLast('/')
+                        else -> null
+                    }
+                }
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+
+        fun fetchModelsForProvider(provider: String, apiKey: String, baseUrl: String): List<String> {
+            return try {
+                when (provider.lowercase()) {
+                    "liteLLM".lowercase() -> {
+                        val url = URL("${baseUrl.removeSuffix("/")}/models")
+                        val conn = url.openConnection() as HttpURLConnection
+                        try {
+                            conn.requestMethod = "GET"
+                            conn.connectTimeout = 30_000
+                            conn.readTimeout = 30_000
+                            conn.setRequestProperty("Authorization", "Bearer $apiKey")
+                            if (conn.responseCode == 200) {
+                                parseModelIds(conn.inputStream.bufferedReader(Charsets.UTF_8).readText())
+                            } else {
+                                emptyList()
+                            }
+                        } finally {
+                            conn.disconnect()
+                        }
+                    }
+                    "groq" -> {
+                        val url = URL("https://api.groq.com/openai/v1/models")
+                        val conn = url.openConnection() as HttpURLConnection
+                        try {
+                            conn.requestMethod = "GET"
+                            conn.connectTimeout = 30_000
+                            conn.readTimeout = 30_000
+                            conn.setRequestProperty("Authorization", "Bearer $apiKey")
+                            if (conn.responseCode == 200) {
+                                parseModelIds(conn.inputStream.bufferedReader(Charsets.UTF_8).readText())
+                            } else {
+                                emptyList()
+                            }
+                        } finally {
+                            conn.disconnect()
+                        }
+                    }
+                    "gemini" -> {
+                        val url = URL("https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey")
+                        val conn = url.openConnection() as HttpURLConnection
+                        try {
+                            conn.requestMethod = "GET"
+                            conn.connectTimeout = 30_000
+                            conn.readTimeout = 30_000
+                            if (conn.responseCode == 200) {
+                                val root = JsonParser.parseString(conn.inputStream.bufferedReader(Charsets.UTF_8).readText()).asJsonObject
+                                val data = root.getAsJsonArray("models") ?: return emptyList()
+                                data.mapNotNull { element ->
+                                    val obj = element.asJsonObject
+                                    when {
+                                        obj.has("name") -> obj.get("name").asString.substringAfterLast('/')
+                                        obj.has("displayName") -> obj.get("displayName").asString
+                                        else -> null
+                                    }
+                                }
+                            } else {
+                                emptyList()
+                            }
+                        } finally {
+                            conn.disconnect()
+                        }
+                    }
+                    else -> defaultModelsForProvider(provider)
+                }
+            } catch (_: Exception) {
+                defaultModelsForProvider(provider)
+            }
         }
 
         fun saveAiConfig() {
@@ -989,8 +1115,11 @@ class RPhoneDesktopApp : Application() {
                     appendLine("  \"provider\": \"${aiCombo.value}\",")
                     appendLine("  \"apiKey\": \"${aiApiKey.text}\",")
                     if (aiCombo.value == "liteLLM") {
-                        appendLine("  \"baseUrl\": \"${aiBaseUrl.text}\"")
+                        appendLine("  \"baseUrl\": \"${aiBaseUrl.text}\",")
+                    } else {
+                        appendLine("  \"baseUrl\": \"\",")
                     }
+                    appendLine("  \"model\": \"${aiModelCombo.value ?: ""}\"")
                     appendLine("}")
                 }
                 val ok = storage.save("ai_settings.json", json)
@@ -1034,10 +1163,14 @@ class RPhoneDesktopApp : Application() {
                 val u = Regex(
                     """"baseUrl"\s*:\s*"([^"]*)""""
                 ).find(loaded)?.groups?.get(1)?.value
+                val m = Regex(
+                    """"model"\s*:\s*"([^"]*)"""
+                ).find(loaded)?.groups?.get(1)?.value
                 withContext(Dispatchers.Main) {
                     if (p != null) aiCombo.value = p
                     if (k != null) aiApiKey.text = k
                     if (u != null) aiBaseUrl.text = u
+                    if (m != null) aiModelCombo.value = m
                     syncAiFields()
                 }
             }
@@ -1053,8 +1186,33 @@ class RPhoneDesktopApp : Application() {
             }
         }
 
-        aiCombo.valueProperty().addListener { _, _, _ -> syncAiFields() }
+        aiCombo.valueProperty().addListener { _, _, newValue ->
+            syncAiFields()
+            populateModelChoices(defaultModelsForProvider(newValue ?: aiCombo.value), aiModelCombo.value)
+        }
         syncAiFields()
+
+        fun refreshModelsFromProvider() {
+            scope.launch {
+                val provider = aiCombo.value
+                val apiKey = aiApiKey.text.trim()
+                val baseUrl = aiBaseUrl.text.trim()
+                val models = fetchModelsForProvider(provider, apiKey, baseUrl)
+                withContext(Dispatchers.Main) {
+                    if (models.isEmpty()) {
+                        populateModelChoices(defaultModelsForProvider(provider), aiModelCombo.value)
+                        notification.showMessage("Model tidak diambil dari server, memakai daftar bawaan")
+                    } else {
+                        populateModelChoices(models, aiModelCombo.value)
+                        notification.showSuccess("${models.size} model dimuat")
+                    }
+                }
+            }
+        }
+
+        if (aiModelCombo.items.isEmpty()) {
+            populateModelChoices(defaultModelsForProvider(aiCombo.value), null)
+        }
 
         return plainPage(VBox(10.0).apply {
             children.addAll(
@@ -1087,8 +1245,10 @@ class RPhoneDesktopApp : Application() {
                         label("API Key", textSecondary, 11.0, true),
                         aiApiKey,
                         aiBaseUrl,
+                        label("Model", textSecondary, 11.0, true),
+                        aiModelCombo,
                         actionButtonsRow(
-                            secondaryActionButton("Fetch Models", purple) { notification.showMessage("Fetching models (stub)...") },
+                            secondaryActionButton("Fetch Models", purple) { refreshModelsFromProvider() },
                             primaryActionButton("SIMPAN KONFIGURASI AI", green) { saveAiConfig() },
                             secondaryActionButton("DTW ${dtwThresholdLabel.text}", cyan) { notification.showMessage("Ambang DTW aktif: ${dtwThresholdLabel.text}") }
                         )
@@ -2117,7 +2277,7 @@ class RPhoneDesktopApp : Application() {
                 appendLine("Last snapshot: $lastSavedRecord")
                 appendLine(receiveBuffer.toString())
             }
-            val ok = storage.export(filename, data)
+            val ok = storage.save(filename, data)
             withContext(Dispatchers.Main) {
                 if (ok) {
                     notification.showSuccess("Export berhasil: $filename")

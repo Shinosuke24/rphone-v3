@@ -41,6 +41,23 @@ class UartAiAnalyzer {
     )
 
     /**
+     * Filter parsed UART messages into a compact AI payload.
+     * Mirrors the APK behavior: keep only meaningful issue lines.
+     */
+    fun buildFilteredAiText(messages: List<ParsedMessage>): String {
+        val baris = mutableListOf<String>()
+        for (item in messages) {
+            if (item.content.isBlank()) continue
+            when (item.level.uppercase()) {
+                "ERROR" -> baris.add("❌ ${item.content}")
+                "WARNING" -> baris.add("⚠️ ${item.content}")
+                else -> baris.add(item.content)
+            }
+        }
+        return baris.take(20).joinToString("\n")
+    }
+
+    /**
      * Filter UART data for AI input (ERROR/WARNING only).
      */
     fun filterDataForAi(messages: List<ParsedMessage>): List<ParsedMessage> {
@@ -84,19 +101,76 @@ class UartAiAnalyzer {
     }
 
     /**
+     * APK-compatible detailed user message builder.
+     */
+    fun buildUserMessage(
+        brand: String,
+        model: String,
+        bootStage: String,
+        thermalStatus: String,
+        modemStatus: String,
+        storageUsed: String,
+        memoryAvailable: String,
+        errorItems: List<ParsedMessage> = emptyList(),
+        rawSample: String = ""
+    ): String {
+        val filteredData = buildFilteredAiText(errorItems)
+        val dataBlock = if (filteredData.isNotBlank()) {
+            "=== DATA PARSED (item bermasalah saja) ===\n$filteredData"
+        } else {
+            "=== DATA PARSED ===\n(Tidak ada item bermasalah terdeteksi)"
+        }
+
+        val infoBlock = buildString {
+            appendLine("🔧 Chipset    : $brand")
+            appendLine("📋 Vendor     : $model")
+            appendLine("📋 Boot Stage : $bootStage")
+            if (thermalStatus != "—") appendLine("🌡 Thermal    : $thermalStatus")
+            if (modemStatus != "—") appendLine("📶 Modem      : $modemStatus")
+            if (storageUsed != "—") appendLine("💾 Storage    : $storageUsed")
+            if (memoryAvailable != "—") appendLine("🧠 Memory     : $memoryAvailable")
+        }.trimEnd()
+
+        return """
+MODE : UART Log Analysis
+
+=== INFO DEVICE ===
+$infoBlock
+
+$dataBlock
+
+=== SAMPEL LOG (20 baris terakhir) ===
+$rawSample
+
+Berikan analisa dan langkah diagnosa secara singkat dan actionable.
+        """.trimIndent()
+    }
+
+    /**
      * System prompt (cached, static).
      */
     fun getSystemPrompt(): String {
         return """
-            Anda adalah teknisi senior phone repair dengan 15 tahun pengalaman.
-            Analisa log UART device Android dan identifikasi masalah hardware/software.
-            
-            Berikan diagnosis dalam 2-3 kalimat singkat, fokus pada:
-            1. Kemungkinan penyebab utama
-            2. Level severity (CRITICAL/HIGH/MEDIUM/LOW)
-            3. Rekomendasi tindakan
-            
-            Gunakan Bahasa Indonesia.
+Kamu adalah teknisi senior spesialis log UART & firmware smartphone berpengalaman lebih dari 10 tahun.
+
+Keahlian utama:
+- Membaca hasil parsing UART: PMIC fault, boot stage stuck, baseband error, power rail anomali
+- Mendiagnosa kerusakan dari pola log: dead boot, bootloop, modem fail, eMMC/UFS error
+- Mengenal perbedaan pola log Qualcomm (SBL/XBL/ABL) dan MediaTek (PRELOADER/LK)
+
+Format respons WAJIB (gunakan persis):
+Dugaan   : [kerusakan utama berdasarkan data parsed]
+Komponen : [komponen yang paling dicurigai]
+Langkah  : 1. [langkah pertama — sebutkan alat, titik ukur, nilai threshold]
+           2. [langkah kedua — bercabang (if-then) jika ada dua kemungkinan]
+           3. [langkah ketiga — maks 3 langkah]
+
+Aturan:
+- Jawab dalam Bahasa Indonesia
+- DILARANG memakai kata "normal", "anomali", atau "tidak normal"
+- Langkah harus actionable: sebutkan nama IC, jalur, atau alat ukur yang relevan
+- Input yang diterima adalah hasil parsing terfilter — HANYA item bermasalah yang dikirim
+- Jika semua data bersih (tidak ada input), jawab: "Tidak ditemukan indikasi kerusakan dari log yang tersedia."
         """.trimIndent()
     }
 
