@@ -2,6 +2,8 @@ package com.rphone.v3.desktop.viewmodel
 
 import com.rphone.v3.core.platform.FileStorage
 import javafx.application.Platform
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
 /**
  * UART mode ViewModel — parity with APK UartViewModel
@@ -87,7 +89,10 @@ class UartViewModel(private val storage: FileStorage) {
                 }
                 append("]")
             }
-            storage.save("uart_rules.json", json)
+            // Fire-and-forget async save to avoid blocking
+            GlobalScope.launch {
+                storage.save("uart_rules.json", json)
+            }
         } catch (_: Exception) {
             // swallow
         }
@@ -95,13 +100,16 @@ class UartViewModel(private val storage: FileStorage) {
 
     fun loadRules() {
         try {
-            val json = storage.load("uart_rules.json") ?: return
-            customRules.clear()
-            Regex("\"([^\"]+)\"").findAll(json).forEach { match ->
-                customRules.add(match.groups[1]?.value ?: "")
-            }
-            Platform.runLater {
-                onRulesUpdate?.invoke(customRules.toList())
+            // Fire-and-forget async load to avoid blocking
+            GlobalScope.launch {
+                val json = storage.load("uart_rules.json") ?: return@launch
+                customRules.clear()
+                Regex("\"([^\"]+)\"").findAll(json).forEach { match ->
+                    customRules.add(match.groups[1]?.value ?: "")
+                }
+                Platform.runLater {
+                    onRulesUpdate?.invoke(customRules.toList())
+                }
             }
         } catch (_: Exception) {
             // swallow

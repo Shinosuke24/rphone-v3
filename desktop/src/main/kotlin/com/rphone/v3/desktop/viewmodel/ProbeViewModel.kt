@@ -1,6 +1,8 @@
 package com.rphone.v3.desktop.viewmodel
 
 import com.rphone.v3.core.platform.FileStorage
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import javafx.application.Platform
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -197,8 +199,12 @@ class ProbeViewModel(private val storage: FileStorage) {
                 "VOLT" -> "VOL"
                 else -> "VOL"
             }
-            val filename = "probe-${modePrefix}-${LocalTime.now().format(DateTimeFormatter.ofPattern("HHmmss"))}.json"
-            storage.save(filename, jsonText)
+            val filename = "probe-${modePrefix}-${java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HHmmss"))}.json"
+            // Fire-and-forget async save to avoid blocking
+            GlobalScope.launch {
+                storage.save(filename, jsonText)
+            }
+            true
         } catch (_: Exception) {
             false
         }

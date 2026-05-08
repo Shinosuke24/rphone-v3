@@ -70,6 +70,9 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.rphone.v3.desktop.viewmodel.ProbeViewModel
+import com.rphone.v3.desktop.viewmodel.UsbViewModel
+import com.rphone.v3.desktop.viewmodel.PsuViewModel
+import com.rphone.v3.desktop.viewmodel.UartViewModel
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -156,6 +159,9 @@ class RPhoneDesktopApp : Application() {
     private var probeSettlingUntilMs = 0L
     private var probePollingJob: Job? = null
     private lateinit var probeViewModel: ProbeViewModel
+    private lateinit var usbViewModel: UsbViewModel
+    private lateinit var psuViewModel: PsuViewModel
+    private lateinit var uartViewModel: UartViewModel
     private val probeHistoryPasif = mutableListOf<ProbeHistoryEntry>()
     private val probeHistoryAktif = mutableListOf<ProbeHistoryEntry>()
     private var psuPwmEnabled = false
@@ -166,6 +172,17 @@ class RPhoneDesktopApp : Application() {
     private val waveIndexFileName = "wave_profiles_index.json"
     private val usbWaveState = DesktopWaveformState()
     private val psuWaveState = DesktopWaveformState()
+    
+    // Probe stabilization buffers and state
+    private val probeVoltBuffer = ArrayDeque<Double>()
+    private val probeDiodeBuffer = ArrayDeque<Double>()
+    private val probeOhmBuffer = ArrayDeque<Double>()
+    private val probeMedianSize = 5
+    private var probeStableDisplay = ""
+    private var probeHasStartedMeasuring = false
+    private var probeLastStableOhm = 0.0
+    private var probeStableStartMs = 0L
+    private var probeStableDurationMs = 500L
 
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
 
@@ -313,6 +330,60 @@ class RPhoneDesktopApp : Application() {
         probeViewModel.onHistoryUpdate = { lines ->
             Platform.runLater {
                 probeHistoryList.items.setAll(lines)
+            }
+        }
+
+        // Initialize USB/PSU/UART ViewModels (parity with APK)
+        usbViewModel = UsbViewModel(storage)
+        usbViewModel.onDataUpdate = { data ->
+            Platform.runLater {
+                usbMetricVoltage.text = formatNumber(data.volt, 3)
+                usbMetricCurrent.text = formatNumber(data.curr, 3)
+                usbMetricDp.text = formatNumber(data.dp, 2)
+                usbMetricDm.text = formatNumber(data.dm, 2)
+                usbMetricPower.text = formatNumber(data.volt * data.curr, 2)
+                usbMetricCharge.text = data.charge
+                usbMetricOcp.text = if (data.ocpEnabled) "ON" else "OFF"
+                usbMetricCapacity.text = if (usbViewModel.getCapacityMah() <= 0.0) "--" else formatNumber(usbViewModel.getCapacityMah(), 1)
+                usbWaveState.addSample(data.curr, data.volt, data.volt * data.curr)
+                drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan, usbWaveState)
+            }
+        }
+        usbViewModel.onSendCommand = { cmd -> sendCommand(cmd) }
+
+        psuViewModel = PsuViewModel()
+        psuViewModel.onDataUpdate = { data ->
+            Platform.runLater {
+                psuMetricVoltage.text = formatNumber(data.volt, 3)
+                psuMetricCurrent.text = formatNumber(data.curr / 2.5, 3)
+                psuMetricPower.text = formatNumber(data.volt * data.curr, 2)
+                psuPwmEnabled = data.pwmEnabled
+                psuPwmDurationMs = data.pwmDur
+                psuPwmButton.text = if (psuPwmEnabled) "PWM ON" else "PWM OFF"
+                psuMetricOcp.text = data.ocpStatus
+                psuOcpStatus = data.ocpStatus
+                psuOcpButton.text = when (psuOcpStatus) {
+                    "TRIP" -> "TRIP"
+                    "ON" -> "OCP ON"
+                    else -> "OCP OFF"
+                }
+                psuWaveState.addSample(data.curr, data.volt, data.volt * data.curr)
+                drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple, psuWaveState)
+            }
+        }
+        psuViewModel.onSendCommand = { cmd -> sendCommand(cmd) }
+
+        uartViewModel = UartViewModel(storage)
+        uartViewModel.onConsoleUpdate = { console ->
+            Platform.runLater {
+                uartConsole.text = console
+                uartConsole.positionCaret(uartConsole.length)
+            }
+        }
+        uartViewModel.onParsedUpdate = { parsed ->
+            Platform.runLater {
+                uartParsedConsole.text = parsed
+                uartParsedConsole.positionCaret(uartParsedConsole.length)
             }
         }
 
@@ -638,11 +709,8 @@ class RPhoneDesktopApp : Application() {
             style = activePsuButtonStyle(false, purple)
             setOnAction {
                 psuPwmEnabled = !psuPwmEnabled
-                if (psuPwmEnabled) {
-                    sendCommands("BUZZ_PWM_ON", "PWM_ON")
-                } else {
-                    sendCommands("BUZZ_PWM_OFF", "PWM_OFF")
-                }
+                sendCommand("BUZZ_PWM_${if (psuPwmEnabled) "ON" else "OFF"}")
+                psuViewModel.setPwm(psuPwmEnabled)
                 text = if (psuPwmEnabled) "PWM ON" else "PWM OFF"
                 style = activePsuButtonStyle(psuPwmEnabled, purple)
             }
@@ -650,17 +718,18 @@ class RPhoneDesktopApp : Application() {
         psuOcpButton = Button("OCP OFF").apply {
             style = activePsuButtonStyle(psuOcpStatus == "ON", red)
             setOnAction {
+                sendCommand("BUZZ_OCP_${when(psuOcpStatus) { "TRIP" -> "RESET"; else -> if (psuOcpStatus == "ON") "OFF" else "ON" }}")
                 when (psuOcpStatus) {
                     "TRIP" -> {
-                        sendCommand("RESET_OCP")
+                        psuViewModel.resetOcp()
                         psuOcpStatus = "ON"
                     }
                     "ON" -> {
-                        sendCommands("BUZZ_OCP_OFF", "OCP_OFF")
+                        psuViewModel.setOcp(false)
                         psuOcpStatus = "OFF"
                     }
                     else -> {
-                        sendCommands("BUZZ_OCP_ON", "OCP_ON")
+                        psuViewModel.setOcp(true)
                         psuOcpStatus = "ON"
                     }
                 }
@@ -676,7 +745,7 @@ class RPhoneDesktopApp : Application() {
         val pwmSlider = sliderWithLabel("PWM", 0.0, 19.0, 3.0, "2.0s") { value ->
             val durMs = ((value.toInt() + 1) * 500).coerceAtLeast(500)
             psuPwmDurationMs = durMs
-            sendCommand(String.format(java.util.Locale.US, "SET_PWM_DUR:%d", durMs))
+            psuViewModel.setPwmDuration(durMs)
         }
         val ocpSlider = sliderWithLabel("OCP", 0.0, 95.0, 25.0, "3.0A") { value ->
             val threshold = 0.5 + (value.toInt() * 0.1)
@@ -2030,6 +2099,10 @@ class RPhoneDesktopApp : Application() {
             uartConsole.clear()
         }
         uartConsole.appendText("[$direction ${timeFormatter.format(LocalTime.now())}] $text\n")
+        // Also wire to UartViewModel if initialized
+        if (::uartViewModel.isInitialized) {
+            uartViewModel.addConsoleMessage(direction, text)
+        }
     }
 
     private fun ingestSerialText(text: String) {
@@ -2076,61 +2149,9 @@ class RPhoneDesktopApp : Application() {
                         else -> (hasDp || hasCharge) // only classify as USB when USB-specific keys present
                     }
                     if (isUsbPayload) {
-                        val volt = extractDoubleFromJson("volt") ?: lastKnownValue
-                        val curr = extractDoubleFromJson("curr") ?: 0.0
-                        val dp = extractDoubleFromJson("dp") ?: 0.0
-                        val dm = extractDoubleFromJson("dm") ?: 0.0
-                        val charge = extractStringFromJson("charge") ?: detectChargeProtocol(dp, dm)
-                        val ocpEnabled = extractBooleanFromJson("ocp_en") ?: true
-                        lastKnownValue = curr
-                        val now = System.currentTimeMillis()
-                        if (usbLastUpdateMs > 0L) {
-                            val dtHours = (now - usbLastUpdateMs) / 3_600_000.0
-                            usbCapacityAccum += curr * 1000.0 * dtHours
-                        }
-                        usbLastUpdateMs = now
-                        usbLastStableCharge = voteUsbCharge(charge)
-                        usbMetricVoltage.text = formatNumber(volt, 3)
-                        usbMetricCurrent.text = formatNumber(curr, 3)
-                        usbMetricDp.text = formatNumber(dp, 2)
-                        usbMetricDm.text = formatNumber(dm, 2)
-                        usbMetricPower.text = formatNumber(volt * curr, 2)
-                        usbMetricCapacity.text = if (usbCapacityAccum <= 0.0) "--" else formatNumber(usbCapacityAccum, 1)
-                        usbMetricCharge.text = usbLastStableCharge
-                        usbMetricOcp.text = if (ocpEnabled) "ON" else "OFF"
-                        usbWaveState.addSample(curr, volt, volt * curr)
-                        drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan, usbWaveState)
+                        usbViewModel.processJson(jsonText)
                     } else if (mode == "PSU") {
-                        val volt = extractDoubleFromJson("volt") ?: 0.0
-                        val curr = extractDoubleFromJson("curr") ?: 0.0
-                        val ocpEnabled = extractBooleanFromJson("ocp_en") ?: false
-                        val ocpEvent = extractStringFromJson("ocp")?.lowercase()
-                        val pwmEnabled = extractBooleanFromJson("pwm_en") ?: false
-                        val pwmDur = extractDoubleFromJson("pwm_dur")?.toInt() ?: 2000
-                        lastKnownValue = curr
-                        psuMetricVoltage.text = formatNumber(volt, 3)
-                        psuMetricCurrent.text = formatNumber(curr / 2.5, 3)
-                        psuMetricPower.text = formatNumber(volt * curr, 2)
-                        psuPwmEnabled = pwmEnabled
-                        psuPwmDurationMs = pwmDur
-                        psuPwmButton.text = if (psuPwmEnabled) "PWM ON" else "PWM OFF"
-                        psuMetricOcp.text = when {
-                            ocpEvent == "trip" -> "TRIP"
-                            ocpEvent == "reset" -> "ON"
-                            ocpEvent == "auto_reset" -> "ON"
-                            ocpEvent == "on" -> "ON"
-                            ocpEvent == "off" -> "OFF"
-                            ocpEnabled -> "ON"
-                            else -> "OFF"
-                        }
-                        psuOcpStatus = psuMetricOcp.text
-                        psuOcpButton.text = when (psuOcpStatus) {
-                            "TRIP" -> "TRIP"
-                            "ON" -> "OCP ON"
-                            else -> "OCP OFF"
-                        }
-                        psuWaveState.addSample(curr, volt, volt * curr)
-                        drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple, psuWaveState)
+                        psuViewModel.processJson(jsonText)
                     } else if (jsonText.contains("\"probe\"")) {
                         // delegate probe parsing and history to ProbeViewModel
                         probeViewModel.processJson(jsonText)
@@ -2680,38 +2701,7 @@ class RPhoneDesktopApp : Application() {
         }
     }
 
-    private fun voteUsbCharge(newValue: String): String {
-        if (usbChargeVoteBuffer.size >= 5) {
-            usbChargeVoteBuffer.removeFirst()
-        }
-        usbChargeVoteBuffer.addLast(newValue)
 
-        val freq = usbChargeVoteBuffer.groupingBy { it }.eachCount()
-        val winner = freq.entries
-            .filter { it.value >= 3 }
-            .maxByOrNull { it.value }
-            ?.key
-
-        if (winner != null) {
-            usbLastStableCharge = winner
-        }
-        return usbLastStableCharge
-    }
-
-    private fun detectChargeProtocol(dp: Double, dm: Double): String {
-        return when {
-            dp < 0.3 && dm < 0.3 -> "SDP"
-            dp in 3.0..3.6 && dm in 0.4..0.8 -> "QC 3.0"
-            dp in 3.0..3.6 && dm < 0.3 -> "QC 2.0"
-            dp >= 2.5 && dm >= 2.5 -> "DCP"
-            dp in 2.4..3.0 && dm in 1.7..2.3 -> "Apple 12W"
-            dp in 1.7..2.3 && dm in 1.7..2.3 -> "CDP"
-            dp in 0.9..1.5 && dm < 0.5 -> "Samsung AFC"
-            dp in 0.5..0.9 && dm < 0.3 -> "MTK PE"
-            dp >= 0.3 || dm >= 0.3 -> "Fast Charging"
-            else -> "UNKNOWN"
-        }
-    }
 
     private fun extractNumericSamples(text: String): List<Double> {
         return Regex("[-+]?[0-9]*\\.?[0-9]+")
