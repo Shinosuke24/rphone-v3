@@ -1,6 +1,7 @@
 # APK → Desktop Parity Audit
 
 Scope: audit and mapping for these APK folders to Desktop equivalents:
+
 - `ui/psu`
 - `ui/probe`
 - `ui/waveid`
@@ -144,12 +145,14 @@ Below are key utils in APK and desktop equivalents.
 ---
 
 Summary of blockers (high level):
+
 - UI overlay pages (ProbeCompare, Wave Compare) not yet ported — algorithm and DB exist; need Canvas overlay and synchronized timebase.
 - Several APK ViewModel classes are not extracted on desktop; logic exists inline in `Main.kt`. For true parity and maintainability, refactor into `desktop/viewmodel/*` matching APK classes.
 - Theme resource centralization missing — currently inline CSS strings in `Main.kt`. Create shared theme/constants to match Android resources.
 - Provider API runtime configs (API keys, endpoints) need to be stored/loaded; `AiConfigStore` exists but verify contents.
 
 Next steps recommended (prioritized):
+
 1. Extract UI pages from `Main.kt` into `desktop/ui/{usb,psu,probe,waveid,uart,settings}` and create corresponding `ViewModel` classes to mirror APK structure.
 2. Implement ProbeCompare and WaveCompare UI overlay using `DtwMatcher` and existing waveform buffers.
 3. Centralize Theme and Colors into `desktop/res/Theme.kt` and apply consistently.
