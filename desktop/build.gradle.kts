@@ -43,6 +43,7 @@ dependencies {
     
     // JSON parsing
     implementation("com.google.code.gson:gson:2.10.1")
+    implementation("org.json:json:20231013")
     
     // Logging
     implementation("org.slf4j:slf4j-api:2.0.9")

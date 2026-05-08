@@ -148,4 +148,32 @@ class DesktopSerialConnection : SerialConnection {
             }
         }
     }
+    
+    /**
+     * Convenience method to send a text command
+     */
+    suspend fun sendCommand(command: String): Boolean {
+        val cmdWithNewline = "$command\n"
+        return send(cmdWithNewline.toByteArray(Charsets.UTF_8))
+    }
+    
+    /**
+     * Convenience method to read available data as string
+     */
+    fun readData(): String {
+        val data = readBuffer.toString()
+        readBuffer.clear()
+        return data
+    }
+    
+    /**
+     * Connect convenience method - accepts null device to use default/first available
+     */
+    suspend fun connect(device: SerialDevice?): Boolean {
+        val devicePath = device?.path ?: run {
+            val devices = getAvailableDevices()
+            devices.firstOrNull()?.path ?: return false
+        }
+        return connect(devicePath)
+    }
 }

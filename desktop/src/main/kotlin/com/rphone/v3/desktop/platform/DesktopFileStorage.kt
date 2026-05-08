@@ -16,6 +16,8 @@ class DesktopFileStorage : FileStorage {
         }
     }
     
+    fun getDataDir(): File = appDataDir
+    
     override suspend fun save(filename: String, data: String): Boolean {
         return try {
             val file = File(appDataDir, filename)

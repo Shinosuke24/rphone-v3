@@ -1263,10 +1263,119 @@ class RPhoneDesktopApp : Application() {
                         }
                     )
                 }),
+                card("Firmware Update", VBox(8.0).apply {
+                    children.addAll(
+                        label("Firmware Version: ${com.rphone.v3.desktop.util.FirmwareChecker.KNOWN_FIRMWARE_VERSION}", purple, 11.0, true),
+                        label("Check and update ESP32 firmware from cloud", textSecondary, 10.0, false),
+                        actionButtonsRow(
+                            primaryActionButton("CHECK FIRMWARE", purple) {
+                                scope.launch {
+                                    val firmwareInfo = com.rphone.v3.desktop.util.FirmwareUpdateHelper.fetchFirmwareInfo()
+                                    withContext(Dispatchers.Main) {
+                                        if (firmwareInfo != null) {
+                                            if (com.rphone.v3.desktop.util.FirmwareUpdateHelper.isUpdateNeeded(
+                                                com.rphone.v3.desktop.util.FirmwareChecker.KNOWN_FIRMWARE_VERSION,
+                                                firmwareInfo.version
+                                            )) {
+                                                notification.showMessage("Firmware update available: v${firmwareInfo.version}")
+                                                com.rphone.v3.desktop.util.DesktopNotificationHelper.showWarning("Update Available", "New firmware v${firmwareInfo.version} is available")
+                                            } else {
+                                                notification.showSuccess("Firmware is up to date")
+                                            }
+                                        } else {
+                                            notification.showError("Failed to check firmware")
+                                        }
+                                    }
+                                }
+                            }
+                        )
+                    )
+                }),
+                card("Backup & Restore", VBox(8.0).apply {
+                    val backupStatusLabel = label("Loading backups...", textSecondary, 10.0, false)
+                    children.addAll(
+                        label("Backup settings and database to ZIP file", textSecondary, 10.0, false),
+                        actionButtonsRow(
+                            primaryActionButton("CREATE BACKUP", cyan) {
+                                scope.launch {
+                                    notification.showMessage("Creating backup...")
+                                    val dataDir = File(System.getProperty("user.home"), ".rphone-v3")
+                                    val backupFile = com.rphone.v3.desktop.util.BackupManager.createBackup(dataDir) { status ->
+                                        Platform.runLater {
+                                            notification.showMessage(status)
+                                        }
+                                    }
+                                    withContext(Dispatchers.Main) {
+                                        if (backupFile != null) {
+                                            notification.showSuccess("Backup created: ${backupFile.name}")
+                                            backupStatusLabel.text = "Last backup: ${backupFile.name}"
+                                        } else {
+                                            notification.showError("Backup failed")
+                                        }
+                                    }
+                                }
+                            },
+                            secondaryActionButton("RESTORE BACKUP", cyan) {
+                                val fileChooser = FileChooser().apply {
+                                    title = "Select backup file"
+                                    extensionFilters.add(FileChooser.ExtensionFilter("ZIP files", "*.zip"))
+                                }
+                                val file = fileChooser.showOpenDialog(null)
+                                if (file != null && file.exists()) {
+                                    scope.launch {
+                                        notification.showMessage("Restoring backup...")
+                                        val dataDir = File(System.getProperty("user.home"), ".rphone-v3")
+                                        val success = com.rphone.v3.desktop.util.BackupManager.restoreBackup(file, dataDir) { status ->
+                                            Platform.runLater {
+                                                notification.showMessage(status)
+                                            }
+                                        }
+                                        withContext(Dispatchers.Main) {
+                                            if (success) {
+                                                notification.showSuccess("Backup restored successfully")
+                                            } else {
+                                                notification.showError("Restore failed")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        ),
+                        label("Recent backups:", muted, 10.0, true),
+                        backupStatusLabel
+                    )
+                    // Load backup list asynchronously
+                    scope.launch {
+                        val dataDir = File(System.getProperty("user.home"), ".rphone-v3")
+                        val backups = com.rphone.v3.desktop.util.BackupManager.listBackups(dataDir).take(3)
+                        withContext(Dispatchers.Main) {
+                            if (backups.isEmpty()) {
+                                backupStatusLabel.text = "No backups found"
+                            } else {
+                                backupStatusLabel.text = backups.joinToString("\n") { backup ->
+                                    "${backup.name} (${com.rphone.v3.desktop.util.BackupManager.getBackupSizeFormatted(backup)})"
+                                }
+                            }
+                        }
+                    }
+                }),
+                card("Auto-Reconnect", VBox(8.0).apply {
+                    children.addAll(
+                        label("Automatic reconnection with exponential backoff", textSecondary, 10.0, false),
+                        label("Max attempts: 5 | Initial delay: 3s | Multiplier: 1.5x", muted, 9.0, true),
+                        label("Max reconnect window: 30 seconds", muted, 9.0, false),
+                        actionButtonsRow(
+                            secondaryActionButton("INFO", cyan) {
+                                notification.showMessage("Auto-reconnect is active. Device will retry up to 5 times with exponential backoff if disconnected.")
+                            }
+                        )
+                    )
+                }),
                 card("About", VBox(6.0).apply {
                     children.addAll(
                         label("EXE uses the same serial backend and file storage abstraction as the APK.", textSecondary, 11.0, false),
-                        label("Android logic stays unchanged; desktop simply mirrors the user flow.", textSecondary, 11.0, false)
+                        label("Android logic stays unchanged; desktop simply mirrors the user flow.", textSecondary, 11.0, false),
+                        label("Features: Firmware OTA, Backup/Restore, Auto-Reconnect, AI Analysis, WaveID Database", textSecondary, 10.0, false)
                     )
                 })
             )
