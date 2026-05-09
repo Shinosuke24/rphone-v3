@@ -46,7 +46,7 @@ class WaveIDDatabase private constructor(dbPath: String) {
                             model TEXT NOT NULL,
                             kondisi TEXT NOT NULL,
                             username TEXT DEFAULT 'Unknown',
-                            tanggal TEXT,
+                            tanggal INTEGER DEFAULT 0,
                             durasi_ms INTEGER DEFAULT 0,
                             
                             -- USB mode
@@ -78,7 +78,7 @@ class WaveIDDatabase private constructor(dbPath: String) {
                             -- Metadata
                             sumber TEXT DEFAULT 'MANUAL',
                             nama_file TEXT,
-                            mode_rekam TEXT DEFAULT 'USB',
+                            mode_rekam TEXT DEFAULT 'PSU',
                             nama_konektor TEXT DEFAULT '',
                             
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -93,6 +93,13 @@ class WaveIDDatabase private constructor(dbPath: String) {
                     stmt.execute("CREATE INDEX IF NOT EXISTS idx_brand_model ON profil_arus(brand, model)")
                     stmt.execute("CREATE INDEX IF NOT EXISTS idx_tanggal ON profil_arus(tanggal DESC)")
                     stmt.execute("CREATE INDEX IF NOT EXISTS idx_nama_file ON profil_arus(nama_file)")
+                }
+
+                // Lightweight runtime migrations for existing DB files.
+                // Keep this idempotent to avoid startup failures.
+                conn.createStatement().use { stmt ->
+                    stmt.execute("UPDATE profil_arus SET mode_rekam = 'PSU' WHERE mode_rekam IS NULL OR trim(mode_rekam) = ''")
+                    stmt.execute("UPDATE profil_arus SET tanggal = 0 WHERE tanggal IS NULL")
                 }
             }
         }

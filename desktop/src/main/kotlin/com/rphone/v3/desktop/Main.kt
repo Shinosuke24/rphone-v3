@@ -404,6 +404,7 @@ class RPhoneDesktopApp : Application() {
                 psuMetricVoltage.text = formatNumber(data.volt, 3)
                 psuMetricCurrent.text = formatNumber(data.curr / 2.5, 3)
                 psuMetricPower.text = formatNumber(data.volt * data.curr, 2)
+                psuMetricCapacity.text = if (psuViewModel.getCapacityMah() <= 0.0) "--" else formatNumber(psuViewModel.getCapacityMah(), 1)
                 psuPwmEnabled = data.pwmEnabled
                 psuPwmDurationMs = data.pwmDur
                 psuPwmButton.text = if (psuPwmEnabled) "PWM ON" else "PWM OFF"
@@ -1815,6 +1816,7 @@ class RPhoneDesktopApp : Application() {
 
                     fun startAnalysis() {
                         dialogStage.close()
+                        logDebug("ANALYSIS_PSU", "start brand=$selectedBrand model=${if (selectedModel.isBlank()) "AUTO" else selectedModel} startIndex=$startIndex psuCandidates=$cachedPsuProfiles")
                         usbAnalysisStatus.text = "Menunggu arus... ($selectedBrand ${if (selectedModel.isNotBlank()) selectedModel else "*"})"
                         usbAnalysisStatus.isVisible = true
                         usbAnalysisStatus.isManaged = true
@@ -1825,24 +1827,34 @@ class RPhoneDesktopApp : Application() {
                         scope.launch { performPsuAnalysisWithDetection(selectedBrand, selectedModel, startIndex) }
                     }
 
-                    if (!serial.isConnected()) {
-                        val preferred = deviceCombo.value
-                        if (preferred != null) {
-                            notification.showMessage("Menyambungkan ke ${preferred.name}...")
-                            scope.launch {
-                                connectTo(preferred)
-                                kotlinx.coroutines.delay(300L)
-                                withContext(Dispatchers.Main) {
-                                    if (serial.isConnected()) startAnalysis() else notification.showError("Tidak terhubung ke device. Sambungkan device sebelum analisa.")
-                                }
+                    scope.launch {
+                        val ready = ensureWaveProfilesReady("psu-analysis-dialog")
+                        withContext(Dispatchers.Main) {
+                            if (!ready) {
+                                notification.showError("Database profile belum siap. Coba Rebuild DB lalu ulangi analisa.")
+                                return@withContext
                             }
-                        } else {
-                            notification.showError("Tidak terhubung ke device. Sambungkan device sebelum analisa.")
-                        }
-                        return@setOnAction
-                    }
 
-                    startAnalysis()
+                            if (!serial.isConnected()) {
+                                val preferred = deviceCombo.value
+                                if (preferred != null) {
+                                    notification.showMessage("Menyambungkan ke ${preferred.name}...")
+                                    scope.launch {
+                                        connectTo(preferred)
+                                        kotlinx.coroutines.delay(300L)
+                                        withContext(Dispatchers.Main) {
+                                            if (serial.isConnected()) startAnalysis() else notification.showError("Tidak terhubung ke device. Sambungkan device sebelum analisa.")
+                                        }
+                                    }
+                                } else {
+                                    notification.showError("Tidak terhubung ke device. Sambungkan device sebelum analisa.")
+                                }
+                                return@withContext
+                            }
+
+                            startAnalysis()
+                        }
+                    }
                 }
             }
 

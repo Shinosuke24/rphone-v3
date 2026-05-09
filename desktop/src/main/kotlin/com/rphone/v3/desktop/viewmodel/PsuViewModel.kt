@@ -22,6 +22,8 @@ class PsuViewModel {
     private var psuPwmEnabled = false
     private var psuPwmDurationMs = 2000
     private var psuOcpStatus = "ON"
+    private var capacityAccumMah = 0.0
+    private var lastUpdateMs = 0L
 
     fun processJson(jsonText: String) {
         try {
@@ -29,22 +31,39 @@ class PsuViewModel {
             fun extractString(key: String): String? = Regex("\"$key\"\\s*:\\s*\"([^\"]*)\"").find(jsonText)?.groups?.get(1)?.value
             fun extractBoolean(key: String): Boolean? = Regex("\"$key\"\\s*:\\s*(true|false)").find(jsonText)?.groups?.get(1)?.value?.equals("true", ignoreCase = true)
 
+            val mode = extractString("mode")?.uppercase()
+            if (mode != null && mode != "PSU") return
+
             val volt = extractDouble("volt") ?: 0.0
             val curr = extractDouble("curr") ?: 0.0
             val pwmEnabled = extractBoolean("pwm_en") ?: false
             val pwmDur = extractDouble("pwm_dur")?.toInt() ?: 2000
             val ocpEvent = extractString("ocp")?.lowercase()
+            val ocpEnabled = extractBoolean("ocp_en")
+            val ocpTripped = extractBoolean("ocp")
 
             psuPwmEnabled = pwmEnabled
             psuPwmDurationMs = pwmDur
-            psuOcpStatus = when (ocpEvent) {
+            psuOcpStatus = when {
+                ocpTripped == true -> "TRIP"
+                ocpEnabled == true -> "ON"
+                ocpEnabled == false -> "OFF"
+                else -> when (ocpEvent) {
                 "trip" -> "TRIP"
                 "reset" -> "ON"
                 "auto_reset" -> "ON"
                 "on" -> "ON"
                 "off" -> "OFF"
                 else -> psuOcpStatus
+                }
             }
+
+            val now = System.currentTimeMillis()
+            if (lastUpdateMs > 0L) {
+                val dtHours = (now - lastUpdateMs) / 3_600_000.0
+                capacityAccumMah += curr * 1000.0 * dtHours
+            }
+            lastUpdateMs = now
 
             val data = PsuData(volt, curr, pwmEnabled, pwmDur, psuOcpStatus)
             Platform.runLater {
@@ -81,5 +100,12 @@ class PsuViewModel {
     fun setPwmDuration(ms: Int) {
         psuPwmDurationMs = ms
         onSendCommand?.invoke("SET_PWM_DUR:$ms")
+    }
+
+    fun getCapacityMah(): Double = capacityAccumMah
+
+    fun resetCapacity() {
+        capacityAccumMah = 0.0
+        lastUpdateMs = 0L
     }
 }
