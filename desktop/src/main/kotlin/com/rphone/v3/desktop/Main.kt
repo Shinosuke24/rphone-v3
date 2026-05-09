@@ -59,6 +59,7 @@ import javafx.animation.Timeline
 import javafx.util.Duration
 import javafx.scene.input.MouseEvent
 import javafx.scene.control.ToggleGroup
+import javafx.scene.control.Tooltip
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -107,6 +108,7 @@ class RPhoneDesktopApp : Application() {
     private lateinit var ttsManager: DesktopTtsManager
     private lateinit var backgroundScheduler: BackgroundTaskScheduler
     private var cloudPollingTask: SupabaseCloudPollingTask? = null
+    private lateinit var waveSubNav: VBox
 
     private lateinit var pageHost: StackPane
     private lateinit var deviceCombo: ComboBox<SerialDevice>
@@ -331,7 +333,14 @@ class RPhoneDesktopApp : Application() {
         
         // Start cloud polling (15 min intervals, same as APK SupabasePollingWorker)
         cloudPollingTask = SupabaseCloudPollingTask(
-            onDataReceived = { data -> println("Cloud sync: $data") },
+            onDataReceived = { _ ->
+                // Trigger explicit sync into local storage + DB when polling reports activity
+                try {
+                    syncWaveDatabase()
+                } catch (e: Exception) {
+                    println("Cloud sync trigger failed: ${e.message}")
+                }
+            },
             onError = { e -> println("Cloud sync error: ${e.message}") }
         )
         cloudPollingTask?.start()
@@ -445,6 +454,17 @@ class RPhoneDesktopApp : Application() {
 
         refreshDevices()
         selectPage(DesktopPage.USB)
+        // Import local .rphp files into DB (if any), then load WaveID DB entries on startup
+        scope.launch {
+            try {
+                val (found, imported, dbCount) = importLocalRphpFilesToDb()
+                println("Startup Wave import: found=$found, imported=$imported, dbCount=$dbCount")
+                loadWaveFiles()
+                println("WaveDB loaded on startup (count=$dbCount)")
+            } catch (e: Exception) {
+                println("Failed to load/import WaveDB on startup: ${e.message}")
+            }
+        }
         startClock()
     }
 
@@ -553,6 +573,60 @@ class RPhoneDesktopApp : Application() {
         navButtons[DesktopPage.UART] = navButton("⌲ UART", Color.web("#14B8A6")) { selectPage(DesktopPage.UART) }
         navButtons[DesktopPage.SETTINGS] = navButton("⚙ SET", textSecondary) { sendCommand("BUZZ_NAV_SET"); selectPage(DesktopPage.SETTINGS) }
         navButtons.values.forEach { nav.children.add(it) }
+
+        // Wave submenu (mirrors APK sub-items) - initially hidden
+        waveSubNav = VBox(4.0).apply {
+            padding = Insets(6.0, 0.0, 6.0, 8.0)
+            isVisible = false
+            isManaged = false
+            children.addAll(
+                Button("Rekam Baru").apply {
+                    style = buttonStyle(cyan, "#111827", "#00D4FF")
+                    graphic = label("🗂", textPrimary, 14.0, false)
+                    tooltip = Tooltip("Rekam arus boot baru (sama seperti APK)")
+                    setOnAction {
+                        logWaveAction("submenu: Rekam Baru clicked")
+                        sendCommand("BUZZ_REKAM_BARU")
+                        selectPage(DesktopPage.WAVEID)
+                        recordWaveProfile()
+                    }
+                },
+                Button("Database").apply {
+                    style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+                    graphic = label("📁", textPrimary, 14.0, false)
+                    tooltip = Tooltip("Buka dan lihat database WaveID")
+                    setOnAction {
+                        logWaveAction("submenu: Database clicked")
+                        sendCommand("BUZZ_BUKA_DB")
+                        selectPage(DesktopPage.WAVEID)
+                        showWaveDatabaseDialog()
+                    }
+                },
+                Button("Bandingkan").apply {
+                    style = buttonStyle(green, "#111827", "#10B981")
+                    graphic = label("◫", textPrimary, 14.0, false)
+                    tooltip = Tooltip("Bandingkan 2 waveform (overlay)")
+                    setOnAction {
+                        logWaveAction("submenu: Bandingkan clicked")
+                        sendCommand("BUZZ_BANDINGKAN")
+                        selectPage(DesktopPage.WAVEID)
+                        compareLatestWaveProfiles()
+                    }
+                },
+                Button("Import").apply {
+                    style = buttonStyle(purple, "#111827", "#A78BFA")
+                    graphic = label("📥", textPrimary, 14.0, false)
+                    tooltip = Tooltip("Import .rphp dari file lokal")
+                    setOnAction {
+                        logWaveAction("submenu: Import clicked")
+                        sendCommand("BUZZ_IMPORT")
+                        selectPage(DesktopPage.WAVEID)
+                        importWaveLog()
+                    }
+                }
+            )
+        }
+        nav.children.add(waveSubNav)
 
         val filler = Region().apply {
             VBox.setVgrow(this, Priority.ALWAYS)
@@ -971,7 +1045,31 @@ class RPhoneDesktopApp : Application() {
                 card("WAVEID", VBox(6.0).apply {
                     children.addAll(
                         label("∿ WAVEID", green, 40.0 / 2.0, true),
-                        label("Analisa & identifikasi arus boot smartphone", textSecondary, 12.0, false)
+                        label("Analisa & identifikasi arus boot smartphone", textSecondary, 12.0, false),
+                        actionButtonsRow(
+                            secondaryActionButton("Rebuild DB", purple) {
+                                scope.launch {
+                                    val (found, imported, dbCount) = importLocalRphpFilesToDb()
+                                    withContext(Dispatchers.Main) {
+                                        notification.showSuccess("Rebuild complete: found=$found, imported=$imported, db=$dbCount")
+                                        loadWaveFiles()
+                                    }
+                                }
+                            },
+                            secondaryActionButton("Sync Now", cyan) {
+                                scope.launch {
+                                    try {
+                                        syncWaveDatabase()
+                                        withContext(Dispatchers.Main) {
+                                            notification.showSuccess("Cloud sync triggered")
+                                            loadWaveFiles()
+                                        }
+                                    } catch (e: Exception) {
+                                        withContext(Dispatchers.Main) { notification.showError("Sync failed: ${e.message}") }
+                                    }
+                                }
+                            }
+                        )
                     )
                 })
             )
@@ -1509,6 +1607,17 @@ class RPhoneDesktopApp : Application() {
                                                 notification.showError("Restore failed")
                                             }
                                         }
+                                    }
+                                }
+                            }
+                        ),
+                        actionButtonsRow(
+                            secondaryActionButton("Rebuild Wave DB", purple) {
+                                scope.launch {
+                                    val (found, imported, dbCount) = importLocalRphpFilesToDb()
+                                    withContext(Dispatchers.Main) {
+                                        notification.showSuccess("Rebuild complete: found=$found, imported=$imported, db=$dbCount")
+                                        loadWaveFiles()
                                     }
                                 }
                             }
@@ -2421,7 +2530,8 @@ class RPhoneDesktopApp : Application() {
         content.maxWidth = Double.MAX_VALUE
         return StackPane(content).apply {
             // add top padding so page headers are not obscured by window chrome
-            padding = Insets(12.0, 12.0, 12.0, 12.0)
+            // reduce top padding slightly so action buttons remain clickable
+            padding = Insets(6.0, 12.0, 12.0, 12.0)
             alignment = Pos.TOP_CENTER
         }
     }
@@ -2482,6 +2592,13 @@ class RPhoneDesktopApp : Application() {
                 muted
             }
             button.style = navStyle(navPage == page, accent)
+        }
+        // Show/hide Wave submenu under sidebar when WaveID page active
+        try {
+            waveSubNav.isVisible = (page == DesktopPage.WAVEID)
+            waveSubNav.isManaged = (page == DesktopPage.WAVEID)
+        } catch (_: Exception) {
+            // ignore if sidebar not fully initialized yet
         }
         when (page) {
             DesktopPage.USB -> {
@@ -4989,6 +5106,98 @@ class RPhoneDesktopApp : Application() {
                 } else {
                     notification.showError("Gagal menyimpan profile")
                 }
+            }
+        }
+    }
+
+    private fun logWaveAction(action: String) {
+        try {
+            val timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+            val dataDir = File(System.getProperty("user.home"), ".rphone-v3")
+            if (!dataDir.exists()) dataDir.mkdirs()
+            val logFile = File(dataDir, "wave_actions.log")
+            val line = "[$timestamp] $action\n"
+            // append asynchronously
+            scope.launch(Dispatchers.IO) {
+                try {
+                    logFile.appendText(line)
+                } catch (_: Exception) {
+                    // ignore logging failures
+                }
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private suspend fun importLocalRphpFilesToDb(): Triple<Int, Int, Int> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val dataDir = File(System.getProperty("user.home"), ".rphone-v3")
+                if (!dataDir.exists() || !dataDir.isDirectory) return@withContext Triple(0, 0, waveIdManager.getTotalCount())
+
+                val rphpFiles = dataDir.listFiles { f -> f.isFile && f.name.endsWith(".rphp", true) }?.toList() ?: emptyList()
+                val totalFound = rphpFiles.size
+                var imported = 0
+
+                // load existing filenames to avoid duplicates
+                val existingFiles = waveIdManager.getAllProfiles().map { it.namaFile }.toSet()
+
+                for (f in rphpFiles) {
+                    try {
+                        val filename = f.name
+                        if (existingFiles.contains(filename)) continue
+
+                        // try to parse as JSON profile first
+                        val parsed = try {
+                            com.rphone.v3.desktop.util.RphpHandler.importProfileJson(f.absolutePath)
+                        } catch (_: Exception) {
+                            null
+                        }
+
+                        if (parsed != null) {
+                            // ensure filename is set
+                            val prof = parsed.copy(
+                                namaFile = parsed.namaFile.ifBlank { filename },
+                                sumber = parsed.sumber.ifBlank { "local" }
+                            )
+                            waveIdManager.saveProfile(prof)
+                            imported++
+                            upsertWaveIndex(filename, filename.removeSuffix(".rphp"), prof.modeRekam.ifBlank { "WAVE" }, "local", f.length())
+                            continue
+                        }
+
+                        // Fallback: read raw content and create a simple profile
+                        val content = try { f.readText(Charsets.UTF_8) } catch (_: Exception) { "" }
+                        val modeTag = when {
+                            filename.contains("usb", true) -> "USB"
+                            filename.contains("psu", true) -> "PSU"
+                            else -> "WAVE"
+                        }
+                        val profile = ProfilArus(
+                            brand = "Local",
+                            model = filename.removeSuffix(".rphp"),
+                            kondisi = "Imported",
+                            username = "Desktop",
+                            tanggal = System.currentTimeMillis(),
+                            durasiMs = 0L,
+                            waveformJson = content,
+                            modeRekam = modeTag,
+                            namaFile = filename,
+                            sumber = "local"
+                        )
+                        waveIdManager.saveProfile(profile)
+                        upsertWaveIndex(filename, filename.removeSuffix(".rphp"), modeTag, "local", f.length())
+                        imported++
+                    } catch (e: Exception) {
+                        println("Failed import $ {f.name}: ${e.message}")
+                    }
+                }
+
+                val dbCount = waveIdManager.getTotalCount()
+                Triple(totalFound, imported, dbCount)
+            } catch (e: Exception) {
+                println("importLocalRphpFilesToDb failed: ${e.message}")
+                Triple(0, 0, waveIdManager.getTotalCount())
             }
         }
     }
