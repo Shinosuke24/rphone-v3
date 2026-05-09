@@ -3603,6 +3603,8 @@ class RPhoneDesktopApp : Application() {
         val chooser = FileChooser()
         chooser.title = "Import .rphp files"
         chooser.extensionFilters.add(FileChooser.ExtensionFilter("RPHP files", "*.rphp"))
+        chooser.extensionFilters.add(FileChooser.ExtensionFilter("ZIP files", "*.zip"))
+        chooser.extensionFilters.add(FileChooser.ExtensionFilter("All files", "*.*"))
         val selections = chooser.showOpenMultipleDialog(null)
         if (selections == null || selections.isEmpty()) {
             notification.showMessage("No files selected for import")
@@ -3612,30 +3614,58 @@ class RPhoneDesktopApp : Application() {
             var imported = 0
             for (f in selections) {
                 try {
-                    val content = f.readText()
-                    val ok = storage.save(f.name, content)
-                    if (ok) {
-                        val modeTag = when {
-                            f.name.contains("usb", true) -> "USB"
-                            f.name.contains("wave", true) -> "WAVE"
-                            else -> "PSU"
+                    if (f.name.endsWith(".zip", ignoreCase = true)) {
+                        // Use RphpHandler for ZIP imports
+                        val restored = waveIdManager.restoreFromZip(f.absolutePath)
+                        if (restored) {
+                            imported++
                         }
-                        imported++
-                        upsertWaveIndex(
-                            filename = f.name,
-                            label = f.name.removeSuffix(".rphp"),
-                            mode = modeTag,
-                            source = "import",
-                            sizeBytes = content.toByteArray(Charsets.UTF_8).size.toLong()
-                        )
+                    } else {
+                        // Handle .rphp text files
+                        val content = f.readText()
+                        val ok = storage.save(f.name, content)
+                        if (ok) {
+                            val modeTag = when {
+                                f.name.contains("usb", true) -> "USB"
+                                f.name.contains("wave", true) -> "WAVE"
+                                else -> "PSU"
+                            }
+                            
+                            // Try to parse and save to database
+                            try {
+                                val profile = ProfilArus(
+                                    brand = "Imported",
+                                    model = f.nameWithoutExtension,
+                                    kondisi = "Auto-imported",
+                                    username = "Import",
+                                    tanggal = System.currentTimeMillis(),
+                                    waveformJson = content,
+                                    modeRekam = modeTag,
+                                    namaFile = f.name,
+                                    sumber = "IMPORT"
+                                )
+                                waveIdManager.saveProfile(profile)
+                            } catch (e: Exception) {
+                                println("Failed to save imported profile to DB: ${e.message}")
+                            }
+                            
+                            imported++
+                            upsertWaveIndex(
+                                filename = f.name,
+                                label = f.name.removeSuffix(".rphp"),
+                                mode = modeTag,
+                                source = "import",
+                                sizeBytes = content.toByteArray(Charsets.UTF_8).size.toLong()
+                            )
+                        }
                     }
                 } catch (e: Exception) {
-                    // ignore individual failures
+                    println("Failed to import file ${f.name}: ${e.message}")
                 }
             }
             withContext(Dispatchers.Main) {
                 if (imported > 0) {
-                    notification.showSuccess("Imported $imported .rphp files")
+                    notification.showSuccess("Imported $imported files")
                     refreshFileLists()
                 } else {
                     notification.showError("No files imported")
@@ -3665,10 +3695,34 @@ class RPhoneDesktopApp : Application() {
                         val fname = if (n.contains('/')) n.substringAfterLast('/') else n
                         val ok = storage.save(fname, content)
                         if (ok) {
+                            val modeTag = when {
+                                fname.contains("usb", true) -> "USB"
+                                fname.contains("psu", true) -> "PSU"
+                                else -> "WAVE"
+                            }
+                            
+                            // Also save to database
+                            try {
+                                val profile = ProfilArus(
+                                    brand = "Cloud",
+                                    model = fname.removeSuffix(".rphp"),
+                                    kondisi = "Synced",
+                                    username = "CloudSync",
+                                    tanggal = System.currentTimeMillis(),
+                                    waveformJson = content,
+                                    modeRekam = modeTag,
+                                    namaFile = fname,
+                                    sumber = "CLOUD"
+                                )
+                                waveIdManager.saveProfile(profile)
+                            } catch (e: Exception) {
+                                println("Failed to save synced profile to DB: ${e.message}")
+                            }
+                            
                             upsertWaveIndex(
                                 filename = fname,
                                 label = fname.removeSuffix(".rphp"),
-                                mode = "PSU",
+                                mode = modeTag,
                                 source = "cloud",
                                 sizeBytes = content.toByteArray(Charsets.UTF_8).size.toLong()
                             )
@@ -4801,6 +4855,35 @@ class RPhoneDesktopApp : Application() {
                 appendLine("}")
             }
             val ok = storage.save(filename, data)
+            
+            // Save to database for analysis
+            val modeTag = when {
+                activePage == DesktopPage.USB -> "USB"
+                activePage == DesktopPage.PSU -> "PSU"
+                receiveBuffer.contains("\"mode\":\"USB\"", true) -> "USB"
+                receiveBuffer.contains("\"mode\":\"PSU\"", true) -> "PSU"
+                else -> "WAVE"
+            }
+            if (ok) {
+                try {
+                    val profile = ProfilArus(
+                        brand = "Desktop",
+                        model = "RPhoneV3",
+                        kondisi = "Captured",
+                        username = username.ifBlank { "Teknisi" },
+                        tanggal = System.currentTimeMillis(),
+                        durasiMs = 25000L,
+                        waveformJson = receiveBuffer.toString(),
+                        modeRekam = modeTag,
+                        namaFile = filename,
+                        sumber = "MANUAL"
+                    )
+                    waveIdManager.saveProfile(profile)
+                } catch (e: Exception) {
+                    println("Failed to save profile to database: ${e.message}")
+                }
+            }
+            
             withContext(Dispatchers.Main) {
                 if (ok) {
                     sendCommand("BUZZ_REKAM_SELESAI")
@@ -4808,11 +4891,7 @@ class RPhoneDesktopApp : Application() {
                     upsertWaveIndex(
                         filename = filename,
                         label = filename.removeSuffix(".rphp"),
-                        mode = when {
-                            activePage == DesktopPage.USB -> "USB"
-                            activePage == DesktopPage.PSU -> "PSU"
-                            else -> "WAVE"
-                        },
+                        mode = modeTag,
                         source = "local",
                         sizeBytes = data.toByteArray(Charsets.UTF_8).size.toLong()
                     )
