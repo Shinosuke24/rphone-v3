@@ -1516,27 +1516,7 @@ class RPhoneDesktopApp : Application() {
             alignment = Pos.CENTER_LEFT
             children.addAll(pageTitle, pageBadge, Region().apply { HBox.setHgrow(this, Priority.ALWAYS) }, connectionStatus, connectionDevice)
 
-            // Add small window controls to page header so each page has working minimize/max/close
-            try {
-                val mini = Button("_").apply {
-                    style = buttonStyle(textSecondary, "#111827", "#94A3B8")
-                    prefWidth = 28.0
-                    setOnAction { primaryStage.isIconified = true }
-                }
-                val maxi = Button("☐").apply {
-                    style = buttonStyle(textSecondary, "#111827", "#94A3B8")
-                    prefWidth = 28.0
-                    setOnAction { primaryStage.isMaximized = !primaryStage.isMaximized }
-                }
-                val clos = Button("✕").apply {
-                    style = buttonStyle(red, "#111827", "#EF4444")
-                    prefWidth = 28.0
-                    setOnAction { primaryStage.close() }
-                }
-                children.addAll(mini, maxi, clos)
-            } catch (_: Exception) {
-                // ignore if stage not yet available in some contexts
-            }
+            // window controls are provided by the main top bar (buildWindowControlBar)
         }
     }
 
