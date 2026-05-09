@@ -1557,6 +1557,10 @@ class RPhoneDesktopApp : Application() {
 
     private fun showChipsetFilterAndStartAnalysis(mode: String) {
         try {
+            if (mode.uppercase() == "USB") {
+                showUsbAnalysisDialog()
+                return
+            }
             val brands = listOf("Generic", "Samsung", "Xiaomi", "OPPO", "Vivo", "Realme", "Apple")
             val dialog = javafx.scene.control.ChoiceDialog(brands.first(), brands)
             dialog.title = "Filter Chipset"
@@ -1577,7 +1581,6 @@ class RPhoneDesktopApp : Application() {
                 usbAnalysisProgress.isManaged = true
                 // trigger device commands or probe start depending on page
                 when (mode.uppercase()) {
-                    "USB" -> sendCommands("SET_MODE_USB", "BUZZ_MULAI_ANALISA")
                     "PSU" -> sendCommands("SET_MODE_PSU", "BUZZ_MULAI_ANALISA")
                     "PROBE" -> {
                         val modeEnum = when (probeActiveMode.uppercase()) {
@@ -1598,6 +1601,156 @@ class RPhoneDesktopApp : Application() {
             }
         } catch (e: Exception) {
             notification.showError("Gagal memulai analisa: ${e.message}")
+        }
+    }
+
+    private fun showUsbAnalysisDialog() {
+        try {
+            val dialogStage = Stage()
+            dialogStage.initOwner(primaryStage)
+            dialogStage.initStyle(StageStyle.UNDECORATED)
+            dialogStage.title = "Mulai Analisa USB"
+
+            val brands: List<String> = try { waveIdManager.getDistinctBrands("USB") } catch (_: Exception) { emptyList() }
+            val brandChoices: List<String> = if (brands.isEmpty()) listOf("Generic") else (listOf("Generic") + brands.distinct())
+            val brandCombo = javafx.scene.control.ComboBox(FXCollections.observableArrayList(brandChoices)).apply {
+                value = brandChoices.first()
+                style = comboStyle()
+                prefWidth = 260.0
+            }
+            val modelCombo = javafx.scene.control.ComboBox<String>(FXCollections.observableArrayList()).apply {
+                promptText = "Pilih model (opsional)"
+                style = comboStyle()
+                isDisable = true
+                prefWidth = 260.0
+            }
+
+            val infoLabel = label("Pilih brand dan model (opsional).", textSecondary, 11.0, false)
+
+            fun refreshModelsForBrand(b: String) {
+                val models = waveIdManager.getProfilesByMode("USB").filter { it.brand.equals(b, true) }.map { it.model }.distinct()
+                if (models.isNotEmpty()) {
+                    modelCombo.items.setAll(models)
+                    modelCombo.isDisable = false
+                } else {
+                    modelCombo.items.clear()
+                    modelCombo.isDisable = true
+                }
+                infoLabel.text = "${waveIdManager.getProfilesByMode("USB").count { it.brand.equals(b, true) }} profil tersedia"
+            }
+
+            brandCombo.valueProperty().addListener { _, _, newV -> refreshModelsForBrand(newV ?: "") }
+            refreshModelsForBrand(brandCombo.value ?: "")
+
+            val btnStart = Button("MULAI ANALISA").apply {
+                style = buttonStyle(cyan, "#111827", "#00D4FF")
+                isDisable = false
+                setOnAction {
+                    val selectedBrand = brandCombo.value ?: "Generic"
+                    val selectedModel = modelCombo.value ?: ""
+                    dialogStage.close()
+                    usbAnalysisStatus.text = "Menunggu arus... ($selectedBrand ${if (selectedModel.isNotBlank()) selectedModel else "*"})"
+                    usbAnalysisStatus.isVisible = true
+                    usbAnalysisStatus.isManaged = true
+                    usbAnalysisProgress.progress = ProgressBar.INDETERMINATE_PROGRESS
+                    usbAnalysisProgress.isVisible = true
+                    usbAnalysisProgress.isManaged = true
+                    sendCommands("SET_MODE_USB", "BUZZ_MULAI_ANALISA")
+                    scope.launch { performUsbAnalysisWithDetection(selectedBrand, selectedModel) }
+                }
+            }
+
+            val layout = VBox(12.0).apply {
+                padding = Insets(12.0)
+                children.addAll(label("Filter Chipset", textPrimary, 14.0, true), brandCombo, modelCombo, infoLabel, btnStart)
+            }
+            dialogStage.scene = Scene(layout)
+            dialogStage.show()
+        } catch (e: Exception) {
+            notification.showError("Gagal tampil dialog USB: ${e.message}")
+        }
+    }
+
+    private suspend fun performUsbAnalysisWithDetection(brand: String, model: String) {
+        withContext(Dispatchers.IO) {
+            try {
+                // stage 1: wait for non-zero current (baseline)
+                val idleStart = System.currentTimeMillis()
+                var detected = false
+                while (System.currentTimeMillis() - idleStart < 20000L && !detected) {
+                    if (lastKnownValue > 0.05) {
+                        detected = true
+                        break
+                    }
+                    kotlinx.coroutines.delay(150)
+                }
+
+                if (!detected) {
+                    withContext(Dispatchers.Main) {
+                        usbAnalysisStatus.text = "Timeout menunggu arus"
+                        usbAnalysisProgress.isVisible = false
+                        usbAnalysisProgress.isManaged = false
+                        notification.showError("Perangkat tidak mengirim arus - analisa dibatalkan")
+                    }
+                    return@withContext
+                }
+
+                // stage 2: collect waveform samples
+                val samples = collectIncomingSamples(25000L, 150)
+                if (samples.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        usbAnalysisStatus.text = "Gagal merekam waveform"
+                        usbAnalysisProgress.isVisible = false
+                        usbAnalysisProgress.isManaged = false
+                        notification.showError("Gagal merekam waveform")
+                    }
+                    return@withContext
+                }
+
+                // stage 3: run DTW against filtered DB
+                val profiles = waveIdManager.getProfilesByMode("USB")
+                val candidates = if (brand.equals("Generic", true)) profiles else profiles.filter { it.brand.equals(brand, true) && (model.isBlank() || it.model.equals(model, true)) }
+                if (candidates.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        usbAnalysisStatus.text = "Tidak ada profil untuk filter"
+                        usbAnalysisProgress.isVisible = false
+                        usbAnalysisProgress.isManaged = false
+                        notification.showMessage("Tidak ada profil untuk brand/model yang dipilih")
+                    }
+                    return@withContext
+                }
+
+                val results = candidates.map { p -> Pair(p, waveSimilarity(samples.map { it.toDouble() }, p.getWaveformArray().map { it.toDouble() })) }.sortedByDescending { it.second }
+                val threshold = dtwThresholdPercent.toDouble()
+                val matches = results.filter { it.second >= threshold }
+                withContext(Dispatchers.Main) {
+                    val lines = if (matches.isNotEmpty()) {
+                        buildList {
+                            add("Hasil Analisa: ${formatNumber(matches.first().second, 1)}%")
+                            add("")
+                            matches.take(5).forEachIndexed { i, (prof, sim) -> add("${i+1}. ${prof.brand} ${prof.model} — ${formatNumber(sim,1)}%") }
+                        }
+                    } else {
+                        buildList {
+                            add("Tidak ada kecocokan >= ${threshold}%")
+                            add("")
+                            results.take(5).forEachIndexed { i, (prof, sim) -> add("${i+1}. ${prof.brand} ${prof.model} — ${formatNumber(sim,1)}%") }
+                        }
+                    }
+                    waveHistoryList.items.setAll(lines)
+                    usbAnalysisStatus.text = "Selesai"
+                    usbAnalysisProgress.isVisible = false
+                    usbAnalysisProgress.isManaged = false
+                    notification.showSuccess("Analisa USB selesai")
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    usbAnalysisStatus.text = "Error: ${e.message}"
+                    usbAnalysisProgress.isVisible = false
+                    usbAnalysisProgress.isManaged = false
+                    notification.showError("Analisa gagal: ${e.message}")
+                }
+            }
         }
     }
 
