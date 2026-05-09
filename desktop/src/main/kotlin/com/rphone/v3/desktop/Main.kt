@@ -2004,21 +2004,24 @@ class RPhoneDesktopApp : Application() {
                     return@withContext
                 }
 
-                val results = candidates.map { p -> Pair(p, waveSimilarity(samples.map { it.toDouble() }, p.getWaveformArray().map { it.toDouble() })) }.sortedByDescending { it.second }
+                // Use WaveIDManager.compareWaveforms to match APK scoring and metadata
+                val queryPeak = if (samples.isNotEmpty()) samples.maxOrNull()!!.toDouble() else 0.0
+                val queryAvg = if (samples.isNotEmpty()) samples.map { it.toDouble() }.average() else 0.0
+                val results = waveIdManager.compareWaveforms(samples.map { it.toDouble() }, queryPeak, queryAvg, candidates)
                 val threshold = dtwThresholdPercent.toDouble()
-                val matches = results.filter { it.second >= threshold }
+                val matches = results.filter { it.similarity >= threshold }
                 withContext(Dispatchers.Main) {
                     val lines = if (matches.isNotEmpty()) {
                         buildList {
-                            add("Hasil Analisa: ${formatNumber(matches.first().second, 1)}%")
+                            add("Hasil Analisa: ${formatNumber(matches.first().similarity, 1)}%")
                             add("")
-                            matches.take(5).forEachIndexed { i, (prof, sim) -> add("${i+1}. ${prof.brand} ${prof.model} — ${formatNumber(sim,1)}%") }
+                            matches.take(5).forEachIndexed { i, res -> add("${i+1}. ${res.brand} ${res.model} — ${formatNumber(res.similarity,1)}%") }
                         }
                     } else {
                         buildList {
                             add("Tidak ada kecocokan >= ${threshold}%")
                             add("")
-                            results.take(5).forEachIndexed { i, (prof, sim) -> add("${i+1}. ${prof.brand} ${prof.model} — ${formatNumber(sim,1)}%") }
+                            results.take(5).forEachIndexed { i, res -> add("${i+1}. ${res.brand} ${res.model} — ${formatNumber(res.similarity,1)}%") }
                         }
                     }
                     waveHistoryList.items.setAll(lines)
@@ -2174,22 +2177,25 @@ class RPhoneDesktopApp : Application() {
                     return@withContext
                 }
 
-                val results = candidates.map { p -> Pair(p, waveSimilarity(samples.map { it.toDouble() }, p.getWaveformArray().map { it.toDouble() })) }.sortedByDescending { it.second }
+                // Use WaveIDManager.compareWaveforms to match APK scoring and metadata
+                val queryPeak = if (samples.isNotEmpty()) samples.maxOrNull()!!.toDouble() else 0.0
+                val queryAvg = if (samples.isNotEmpty()) samples.map { it.toDouble() }.average() else 0.0
+                val results = waveIdManager.compareWaveforms(samples.map { it.toDouble() }, queryPeak, queryAvg, candidates)
                 val threshold = dtwThresholdPercent.toDouble()
-                val matches = results.filter { it.second >= threshold }
+                val matches = results.filter { it.similarity >= threshold }
 
                 withContext(Dispatchers.Main) {
                     val lines = if (matches.isNotEmpty()) {
                         buildList {
-                            add("Hasil Analisa: ${formatNumber(matches.first().second, 1)}%")
+                            add("Hasil Analisa: ${formatNumber(matches.first().similarity, 1)}%")
                             add("")
-                            matches.take(5).forEachIndexed { i, (prof, sim) -> add("${i+1}. ${prof.brand} ${prof.model} — ${formatNumber(sim,1)}%") }
+                            matches.take(5).forEachIndexed { i, res -> add("${i+1}. ${res.brand} ${res.model} — ${formatNumber(res.similarity,1)}%") }
                         }
                     } else {
                         buildList {
                             add("Tidak ada kecocokan >= ${threshold}%")
                             add("")
-                            results.take(5).forEachIndexed { i, (prof, sim) -> add("${i+1}. ${prof.brand} ${prof.model} — ${formatNumber(sim,1)}%") }
+                            results.take(5).forEachIndexed { i, res -> add("${i+1}. ${res.brand} ${res.model} — ${formatNumber(res.similarity,1)}%") }
                         }
                     }
                     waveHistoryList.items.setAll(lines)
@@ -2269,34 +2275,28 @@ class RPhoneDesktopApp : Application() {
                     return@launch
                 }
 
-                // compute similarity scores
-                val scores = buildList {
-                    for (p in candidates) {
-                        val ref = p.getWaveformArray()
-                        if (ref.isEmpty()) continue
-                        val sim = waveSimilarity(samples.map { it.toDouble() }, ref.map { it.toDouble() })
-                        add(Pair(p, sim))
-                    }
-                }.sortedByDescending { it.second }
-
+                // Use WaveIDManager.compareWaveforms for parity with APK
+                val queryPeak = if (samples.isNotEmpty()) samples.maxOrNull()!!.toDouble() else 0.0
+                val queryAvg = if (samples.isNotEmpty()) samples.map { it.toDouble() }.average() else 0.0
+                val results = waveIdManager.compareWaveforms(samples.map { it.toDouble() }, queryPeak, queryAvg, candidates)
                 val threshold = dtwThresholdPercent.toDouble()
-                val matches = scores.filter { it.second >= threshold }
+                val matches = results.filter { it.similarity >= threshold }
 
                 withContext(Dispatchers.Main) {
                     val display = if (matches.isNotEmpty()) {
                         buildList {
-                            add("ANALISA SELESAI — ${matches.first().second}% cocok")
+                            add("ANALISA SELESAI — ${formatNumber(matches.first().similarity,1)}% cocok")
                             add("")
-                            matches.take(10).forEachIndexed { idx, (prof, sim) ->
-                                add("${idx + 1}. ${prof.brand} ${prof.model} | ${prof.kondisi} — ${formatNumber(sim, 1)}%")
+                            matches.take(10).forEachIndexed { idx, res ->
+                                add("${idx + 1}. ${res.brand} ${res.model} | ${res.kondisi} — ${formatNumber(res.similarity, 1)}%")
                             }
                         }
                     } else {
                         buildList {
                             add("Tidak ada kecocokan di atas ${threshold}%")
                             add("")
-                            scores.take(5).forEachIndexed { idx, (prof, sim) ->
-                                add("${idx + 1}. ${prof.brand} ${prof.model} | ${prof.kondisi} — ${formatNumber(sim, 1)}%")
+                            results.take(5).forEachIndexed { idx, res ->
+                                add("${idx + 1}. ${res.brand} ${res.model} | ${res.kondisi} — ${formatNumber(res.similarity, 1)}%")
                             }
                         }
                     }
