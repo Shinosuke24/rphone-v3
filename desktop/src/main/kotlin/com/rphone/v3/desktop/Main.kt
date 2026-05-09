@@ -1139,13 +1139,15 @@ class RPhoneDesktopApp : Application() {
         }
         settingsUsernameField = TextField().apply { promptText = "Nama teknisi (username)"; style = controlStyle() }
 
-        val dtwSlider = Slider(90.0, 100.0, 100.0).apply {
+        val dtwSlider = Slider(90.0, 100.0, dtwThresholdPercent.toDouble()).apply {
             isShowTickMarks = true
             isShowTickLabels = true
-            majorTickUnit = 5.0
+            majorTickUnit = 1.0
             blockIncrement = 1.0
             valueProperty().addListener { _, _, newValue ->
-                dtwThresholdLabel.text = "${newValue.toInt()}%"
+                val newThreshold = newValue.toInt()
+                dtwThresholdPercent = newThreshold
+                dtwThresholdLabel.text = "${newThreshold}%"
             }
         }
 
@@ -1304,12 +1306,13 @@ class RPhoneDesktopApp : Application() {
                 val ujson = buildString {
                     appendLine("{")
                     appendLine("  \"username\": \"${escapeJson(settingsUsernameField.text)}\",")
-                    appendLine("  \"connectionMode\": \"${modeCombo.value}\"")
+                    appendLine("  \"connectionMode\": \"${modeCombo.value}\",")
+                    appendLine("  \"dtwThreshold\": ${dtwThresholdPercent}")
                     appendLine("}")
                 }
                 val ok = storage.save("user_settings.json", ujson)
                 withContext(Dispatchers.Main) {
-                    if (ok) notification.showSuccess("User setting tersimpan") else notification.showError("Gagal simpan user setting")
+                    if (ok) notification.showSuccess("User setting tersimpan (DTW: ${dtwThresholdPercent}%)") else notification.showError("Gagal simpan user setting")
                 }
             }
         }
@@ -1344,9 +1347,15 @@ class RPhoneDesktopApp : Application() {
             if (userLoaded.isNotBlank()) {
                 val uname = Regex("\"username\"\\s*:\\s*\"([^\"]+)\"").find(userLoaded)?.groups?.get(1)?.value
                 val mode = Regex("\"connectionMode\"\\s*:\\s*\"([^\"]+)\"").find(userLoaded)?.groups?.get(1)?.value
+                val dtwThresh = Regex("\"dtwThreshold\"\\s*:\\s*(\\d+)").find(userLoaded)?.groups?.get(1)?.value?.toIntOrNull()
                 withContext(Dispatchers.Main) {
                     if (uname != null) settingsUsernameField.text = uname
                     if (mode != null && mode in listOf("auto", "bt", "otg")) modeCombo.value = mode
+                    if (dtwThresh != null && dtwThresh in 90..100) {
+                        dtwThresholdPercent = dtwThresh
+                        dtwThresholdLabel.text = "${dtwThresh}%"
+                        dtwSlider.value = dtwThresh.toDouble()
+                    }
                 }
             }
         }
