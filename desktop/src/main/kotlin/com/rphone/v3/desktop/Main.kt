@@ -1591,9 +1591,109 @@ class RPhoneDesktopApp : Application() {
                     }
                     else -> sendCommands("BUZZ_MULAI_ANALISA")
                 }
+                // start background watcher that waits for incoming waveform then runs DTW match
+                scope.launch {
+                    performAnalysis(mode, selected)
+                }
             }
         } catch (e: Exception) {
             notification.showError("Gagal memulai analisa: ${e.message}")
+        }
+    }
+
+    private suspend fun collectIncomingSamples(timeoutMs: Long = 20000L, minSamples: Int = 60): List<Double> {
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < timeoutMs) {
+            val snapshot = receiveBuffer.toString()
+            val samples = extractWaveSamples(snapshot)
+            if (samples.size >= minSamples) return samples
+            kotlinx.coroutines.delay(250L)
+        }
+        return emptyList()
+    }
+
+    private fun performAnalysis(mode: String, brandFilter: String) {
+        scope.launch {
+            try {
+                val samples = collectIncomingSamples(25000L, 60)
+                if (samples.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        usbAnalysisStatus.text = "Gagal: tidak menerima data waveform"
+                        notification.showError("Timeout menunggu arus dari perangkat")
+                        usbAnalysisProgress.isVisible = false
+                        usbAnalysisProgress.isManaged = false
+                        usbAnalysisStatus.isVisible = true
+                    }
+                    return@launch
+                }
+
+                // obtain reference profiles for the current mode
+                val modeTag = when (mode.uppercase()) {
+                    "USB" -> "USB"
+                    "PSU" -> "PSU"
+                    else -> "WAVE"
+                }
+                val profiles = waveIdManager.getProfilesByMode(modeTag)
+
+                // filter by brand if requested and not Generic
+                val candidates = if (brandFilter.equals("Generic", ignoreCase = true)) profiles else profiles.filter { it.brand.equals(brandFilter, ignoreCase = true) }
+
+                if (candidates.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        usbAnalysisStatus.text = "Tidak ada profil di DB untuk filter"
+                        notification.showMessage("Tidak ditemukan profil untuk brand: $brandFilter")
+                        usbAnalysisProgress.isVisible = false
+                        usbAnalysisProgress.isManaged = false
+                    }
+                    return@launch
+                }
+
+                // compute similarity scores
+                val scores = buildList {
+                    for (p in candidates) {
+                        val ref = p.getWaveformArray()
+                        if (ref.isEmpty()) continue
+                        val sim = waveSimilarity(samples.map { it.toDouble() }, ref.map { it.toDouble() })
+                        add(Pair(p, sim))
+                    }
+                }.sortedByDescending { it.second }
+
+                val threshold = dtwThresholdPercent.toDouble()
+                val matches = scores.filter { it.second >= threshold }
+
+                withContext(Dispatchers.Main) {
+                    val display = if (matches.isNotEmpty()) {
+                        buildList {
+                            add("ANALISA SELESAI — ${matches.first().second}% cocok")
+                            add("")
+                            matches.take(10).forEachIndexed { idx, (prof, sim) ->
+                                add("${idx + 1}. ${prof.brand} ${prof.model} | ${prof.kondisi} — ${formatNumber(sim, 1)}%")
+                            }
+                        }
+                    } else {
+                        buildList {
+                            add("Tidak ada kecocokan di atas ${threshold}%")
+                            add("")
+                            scores.take(5).forEachIndexed { idx, (prof, sim) ->
+                                add("${idx + 1}. ${prof.brand} ${prof.model} | ${prof.kondisi} — ${formatNumber(sim, 1)}%")
+                            }
+                        }
+                    }
+                    waveHistoryList.items.setAll(display)
+                    usbAnalysisStatus.text = "Selesai"
+                    usbAnalysisProgress.isVisible = false
+                    usbAnalysisProgress.isManaged = false
+                    usbAnalysisStatus.isVisible = true
+                    notification.showSuccess("Analisa selesai")
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    usbAnalysisStatus.text = "Error: ${e.message}"
+                    usbAnalysisProgress.isVisible = false
+                    usbAnalysisProgress.isManaged = false
+                    notification.showError("Analisa gagal: ${e.message}")
+                }
+            }
         }
     }
 
