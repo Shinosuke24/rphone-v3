@@ -1725,15 +1725,38 @@ class RPhoneDesktopApp : Application() {
                 btnStart.setOnAction {
                     val selectedBrand = brandCombo.value ?: "— Pilih Brand —"
                     val selectedModel = modelCombo.value?.takeIf { it != "— Auto —" } ?: ""
-                    dialogStage.close()
-                    usbAnalysisStatus.text = "Menunggu arus... ($selectedBrand ${if (selectedModel.isNotBlank()) selectedModel else "*"})"
-                    usbAnalysisStatus.isVisible = true
-                    usbAnalysisStatus.isManaged = true
-                    usbAnalysisProgress.progress = ProgressBar.INDETERMINATE_PROGRESS
-                    usbAnalysisProgress.isVisible = true
-                    usbAnalysisProgress.isManaged = true
-                    sendCommands("SET_MODE_PSU", "BUZZ_MULAI_ANALISA")
-                    scope.launch { performPsuAnalysisWithDetection(selectedBrand, selectedModel) }
+                    val startIndex = psuWaveState.currentBuf.size
+
+                    fun startAnalysis() {
+                        dialogStage.close()
+                        usbAnalysisStatus.text = "Menunggu arus... ($selectedBrand ${if (selectedModel.isNotBlank()) selectedModel else "*"})"
+                        usbAnalysisStatus.isVisible = true
+                        usbAnalysisStatus.isManaged = true
+                        usbAnalysisProgress.progress = ProgressBar.INDETERMINATE_PROGRESS
+                        usbAnalysisProgress.isVisible = true
+                        usbAnalysisProgress.isManaged = true
+                        sendCommands("SET_MODE_PSU", "BUZZ_MULAI_ANALISA")
+                        scope.launch { performPsuAnalysisWithDetection(selectedBrand, selectedModel, startIndex) }
+                    }
+
+                    if (!serial.isConnected()) {
+                        val preferred = deviceCombo.value
+                        if (preferred != null) {
+                            notification.showMessage("Menyambungkan ke ${preferred.name}...")
+                            scope.launch {
+                                connectTo(preferred)
+                                kotlinx.coroutines.delay(300L)
+                                withContext(Dispatchers.Main) {
+                                    if (serial.isConnected()) startAnalysis() else notification.showError("Tidak terhubung ke device. Sambungkan device sebelum analisa.")
+                                }
+                            }
+                        } else {
+                            notification.showError("Tidak terhubung ke device. Sambungkan device sebelum analisa.")
+                        }
+                        return@setOnAction
+                    }
+
+                    startAnalysis()
                 }
             }
 
@@ -1796,31 +1819,38 @@ class RPhoneDesktopApp : Application() {
                 setOnAction {
                     val selectedBrand = brandCombo.value ?: "Generic"
                     val selectedModel = modelCombo.value ?: ""
-                    // Ensure serial is connected before starting analysis. If not, try to auto-connect to selected device.
+                    val startIndex = usbWaveState.currentBuf.size
+
+                    fun startAnalysis() {
+                        dialogStage.close()
+                        usbAnalysisStatus.text = "Menunggu arus... ($selectedBrand ${if (selectedModel.isNotBlank()) selectedModel else "*"})"
+                        usbAnalysisStatus.isVisible = true
+                        usbAnalysisStatus.isManaged = true
+                        usbAnalysisProgress.progress = ProgressBar.INDETERMINATE_PROGRESS
+                        usbAnalysisProgress.isVisible = true
+                        usbAnalysisProgress.isManaged = true
+                        sendCommands("SET_MODE_USB", "BUZZ_MULAI_ANALISA")
+                        scope.launch { performUsbAnalysisWithDetection(selectedBrand, selectedModel, startIndex) }
+                    }
+
                     if (!serial.isConnected()) {
                         val preferred = deviceCombo.value
                         if (preferred != null) {
                             notification.showMessage("Menyambungkan ke ${preferred.name}...")
-                            connectTo(preferred)
-                            // give a short time for connection and receive loop to start
-                            kotlinx.coroutines.runBlocking { kotlinx.coroutines.delay(500L) }
+                            scope.launch {
+                                connectTo(preferred)
+                                kotlinx.coroutines.delay(300L)
+                                withContext(Dispatchers.Main) {
+                                    if (serial.isConnected()) startAnalysis() else notification.showError("Tidak terhubung ke device. Sambungkan device sebelum analisa.")
+                                }
+                            }
+                        } else {
+                            notification.showError("Tidak terhubung ke device. Sambungkan device sebelum analisa.")
                         }
-                    }
-
-                    if (!serial.isConnected()) {
-                        notification.showError("Tidak terhubung ke device. Sambungkan device sebelum analisa.")
                         return@setOnAction
                     }
 
-                    dialogStage.close()
-                    usbAnalysisStatus.text = "Menunggu arus... ($selectedBrand ${if (selectedModel.isNotBlank()) selectedModel else "*"})"
-                    usbAnalysisStatus.isVisible = true
-                    usbAnalysisStatus.isManaged = true
-                    usbAnalysisProgress.progress = ProgressBar.INDETERMINATE_PROGRESS
-                    usbAnalysisProgress.isVisible = true
-                    usbAnalysisProgress.isManaged = true
-                    sendCommands("SET_MODE_USB", "BUZZ_MULAI_ANALISA")
-                    scope.launch { performUsbAnalysisWithDetection(selectedBrand, selectedModel) }
+                    startAnalysis()
                 }
             }
 
@@ -1835,14 +1865,15 @@ class RPhoneDesktopApp : Application() {
         }
     }
 
-    private suspend fun performUsbAnalysisWithDetection(brand: String, model: String) {
+    private suspend fun performUsbAnalysisWithDetection(brand: String, model: String, startIndex: Int = 0) {
         withContext(Dispatchers.IO) {
             try {
                 // stage 1: wait for non-zero current (baseline)
                 val idleStart = System.currentTimeMillis()
                 var detected = false
                 while (System.currentTimeMillis() - idleStart < 20000L && !detected) {
-                    if (lastKnownValue > 0.05) {
+                    val currNow = usbWaveState.currentBuf.drop(startIndex).lastOrNull() ?: lastKnownValue
+                    if (currNow > 0.05) {
                         detected = true
                         break
                     }
@@ -1860,7 +1891,7 @@ class RPhoneDesktopApp : Application() {
                 }
 
                 // stage 2: collect waveform samples
-                val samples = collectIncomingSamples(25000L, 150)
+                val samples = collectWaveStateSamples(usbWaveState, startIndex, 25000L, 150)
                 if (samples.isEmpty()) {
                     withContext(Dispatchers.Main) {
                         usbAnalysisStatus.text = "Gagal merekam waveform"
@@ -1918,7 +1949,7 @@ class RPhoneDesktopApp : Application() {
         }
     }
 
-    private suspend fun performPsuAnalysisWithDetection(brand: String, model: String = "") {
+    private suspend fun performPsuAnalysisWithDetection(brand: String, model: String = "", startIndex: Int = 0) {
         withContext(Dispatchers.IO) {
             try {
                 // FASE 1: Pre-analisa 10 detik sampling
@@ -1928,7 +1959,7 @@ class RPhoneDesktopApp : Application() {
                 val iterasi = (DURASI_PRE / INTERVAL).toInt()
                 repeat(iterasi) {
                     if (!isActive) return@withContext
-                    val curr = psuWaveState.currentBuf.lastOrNull() ?: lastKnownValue
+                    val curr = psuWaveState.currentBuf.drop(startIndex).lastOrNull() ?: lastKnownValue
                     preBuffer.add(curr)
                     kotlinx.coroutines.delay(INTERVAL)
                 }
@@ -1960,7 +1991,7 @@ class RPhoneDesktopApp : Application() {
                     val startTime = System.currentTimeMillis()
                     var triggered = false
                     while (System.currentTimeMillis() - startTime < TIMEOUT_NORMAL && !triggered) {
-                        val currNow = psuWaveState.currentBuf.lastOrNull() ?: lastKnownValue
+                        val currNow = psuWaveState.currentBuf.drop(startIndex).lastOrNull() ?: lastKnownValue
                         if (currNow > 0.01) { triggered = true; break }
                         kotlinx.coroutines.delay(200)
                     }
@@ -1974,7 +2005,7 @@ class RPhoneDesktopApp : Application() {
                     withContext(Dispatchers.Main) {
                         usbAnalysisStatus.text = "Merekam waveform..."
                     }
-                    samples = collectIncomingSamples(60_000L, 300)
+                    samples = collectWaveStateSamples(psuWaveState, startIndex, 60_000L, 300)
                     if (samples.isEmpty()) {
                         withContext(Dispatchers.Main) {
                             usbAnalysisStatus.text = "Gagal merekam waveform"
@@ -1987,20 +2018,20 @@ class RPhoneDesktopApp : Application() {
                     // SHORT path: wait device removed (curr -> 0), reattach, measure baseline, then wait spike
                     // Langkah 1: tunggu arus <= 0.01
                     while (true) {
-                        val currNow = psuWaveState.currentBuf.lastOrNull() ?: lastKnownValue
+                        val currNow = psuWaveState.currentBuf.drop(startIndex).lastOrNull() ?: lastKnownValue
                         if (currNow <= 0.01) break
                         kotlinx.coroutines.delay(200)
                     }
                     // Langkah 2: tunggu arus > 0.01 (pasang kembali)
                     while (true) {
-                        val currNow = psuWaveState.currentBuf.lastOrNull() ?: lastKnownValue
+                        val currNow = psuWaveState.currentBuf.drop(startIndex).lastOrNull() ?: lastKnownValue
                         if (currNow > 0.01) break
                         kotlinx.coroutines.delay(200)
                     }
                     // Ukur baseline 2 detik
                     val baselineBuffer = mutableListOf<Double>()
                     repeat(10) {
-                        val currNow = psuWaveState.currentBuf.lastOrNull() ?: lastKnownValue
+                        val currNow = psuWaveState.currentBuf.drop(startIndex).lastOrNull() ?: lastKnownValue
                         baselineBuffer.add(currNow)
                         kotlinx.coroutines.delay(200)
                     }
@@ -2016,7 +2047,7 @@ class RPhoneDesktopApp : Application() {
                     val startTimeShort = System.currentTimeMillis()
                     var triggered = false
                     while (System.currentTimeMillis() - startTimeShort < TIMEOUT_SHORT && !triggered) {
-                        val currNow = psuWaveState.currentBuf.lastOrNull() ?: lastKnownValue
+                        val currNow = psuWaveState.currentBuf.drop(startIndex).lastOrNull() ?: lastKnownValue
                         if (currNow > triggerThreshold) { triggered = true; break }
                         kotlinx.coroutines.delay(200)
                     }
@@ -2025,12 +2056,12 @@ class RPhoneDesktopApp : Application() {
                             usbAnalysisStatus.text = "⏱ Tidak ada spike booting — menggunakan snapshot terakhir"
                         }
                         // attempt to collect a small sample set
-                        samples = collectIncomingSamples(5_000L, 1)
+                        samples = collectWaveStateSamples(psuWaveState, startIndex, 5_000L, 1)
                     } else {
                         withContext(Dispatchers.Main) {
                             usbAnalysisStatus.text = "Merekam waveform (short-path)..."
                         }
-                        samples = collectIncomingSamples(30_000L, 300)
+                        samples = collectWaveStateSamples(psuWaveState, startIndex, 30_000L, 300)
                     }
                     if (samples.isEmpty()) {
                         withContext(Dispatchers.Main) {
@@ -2092,6 +2123,21 @@ class RPhoneDesktopApp : Application() {
         while (System.currentTimeMillis() - start < timeoutMs) {
             val snapshot = receiveBuffer.toString()
             val samples = extractWaveSamples(snapshot)
+            if (samples.size >= minSamples) return samples
+            kotlinx.coroutines.delay(250L)
+        }
+        return emptyList()
+    }
+
+    private suspend fun collectWaveStateSamples(
+        state: DesktopWaveformState,
+        startIndex: Int,
+        timeoutMs: Long = 20000L,
+        minSamples: Int = 60
+    ): List<Double> {
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < timeoutMs) {
+            val samples = state.currentBuf.drop(startIndex)
             if (samples.size >= minSamples) return samples
             kotlinx.coroutines.delay(250L)
         }
