@@ -30,6 +30,7 @@ import javafx.scene.control.Label
 import javafx.scene.control.ListView
 import javafx.scene.control.Separator
 import javafx.scene.control.Slider
+import javafx.scene.control.ProgressBar
 import javafx.scene.control.TextArea
 import javafx.scene.control.TextField
 import javafx.scene.control.ToggleButton
@@ -96,6 +97,8 @@ class RPhoneDesktopApp : Application() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var serial: SerialConnection
+    private lateinit var primaryStage: Stage
+    private var dtwThresholdPercent: Int = 100
     private lateinit var storage: FileStorage
     private lateinit var notification: PlatformNotification
     private lateinit var waveIdManager: com.rphone.v3.desktop.managers.WaveIDManager
@@ -122,6 +125,8 @@ class RPhoneDesktopApp : Application() {
     private lateinit var usbMetricOcp: Label
     private lateinit var usbMetricDp: Label
     private lateinit var usbMetricDm: Label
+    private lateinit var usbAnalysisProgress: ProgressBar
+    private lateinit var usbAnalysisStatus: Label
     private lateinit var psuMetricCurrent: Label
     private lateinit var psuMetricVoltage: Label
     private lateinit var psuMetricPower: Label
@@ -135,6 +140,7 @@ class RPhoneDesktopApp : Application() {
     private lateinit var probeDiodeLabel: Label
     private lateinit var probeOhmLabel: Label
     private lateinit var settingsStatus: Label
+    private lateinit var dtwThresholdLabel: Label
     private lateinit var clockLabel: Label
     private lateinit var settingsUsernameField: TextField
     private lateinit var usbChartCanvas: Canvas
@@ -280,6 +286,7 @@ class RPhoneDesktopApp : Application() {
     }
 
     override fun start(stage: Stage) {
+        primaryStage = stage
         PlatformProvider.initialize(
             DesktopSerialConnection(),
             DesktopFileStorage(),
@@ -656,10 +663,10 @@ class RPhoneDesktopApp : Application() {
         val actionPanel = card("Quick Action", VBox(8.0).apply {
             children.addAll(
                 primaryActionButton("MULAI ANALISA", cyan) {
-                    sendCommands("SET_MODE_USB", "BUZZ_MULAI_ANALISA")
+                    showChipsetFilterAndStartAnalysis("USB")
                 },
                 secondaryActionButton("STOP ANALISA", red) {
-                    sendCommands("BUZZ_STOP_ANALISA")
+                    stopAnalysis()
                 },
                 secondaryActionButton("RESET DATA", purple) {
                     sendCommands("BUZZ_RESET_WAVE")
@@ -670,6 +677,17 @@ class RPhoneDesktopApp : Application() {
             )
         })
 
+        // analysis progress/status elements (hidden until analysis starts)
+        usbAnalysisProgress = ProgressBar(0.0).apply {
+            isVisible = false
+            isManaged = false
+            prefWidth = 220.0
+        }
+        usbAnalysisStatus = label("", textSecondary, 11.0, false).apply {
+            isVisible = false
+            isManaged = false
+        }
+
         val leftColumn = VBox(10.0).apply {
             prefWidth = 430.0
             minWidth = 430.0
@@ -677,7 +695,9 @@ class RPhoneDesktopApp : Application() {
             children.addAll(
                 connectionCard("USB MODE", cyan),
                 card("USB Metrics", metrics),
-                actionPanel
+                actionPanel,
+                usbAnalysisStatus,
+                usbAnalysisProgress
             )
         }
 
@@ -772,8 +792,8 @@ class RPhoneDesktopApp : Application() {
                 )),
                 settingsPanel,
                 actionButtonsRow(
-                    primaryActionButton("MULAI ANALISA", purple) { sendCommands("SET_MODE_PSU", "BUZZ_MULAI_ANALISA") },
-                    secondaryActionButton("STOP ANALISA", red) { sendCommand("BUZZ_STOP_ANALISA") },
+                    primaryActionButton("MULAI ANALISA", purple) { showChipsetFilterAndStartAnalysis("PSU") },
+                    secondaryActionButton("STOP ANALISA", red) { stopAnalysis() },
                     secondaryActionButton("LIHAT DETAIL ↗", textPrimary) { notification.showMessage("Detail view diwakili oleh shell EXE") }
                 )
             )
@@ -866,17 +886,7 @@ class RPhoneDesktopApp : Application() {
                     )
                 }),
                 actionButtonsRow(
-                    primaryActionButton("MULAI ANALISA", amber) { 
-                        // Start actual probe analysis/polling (parity with APK ProbeViewModel)
-                        val mode = when (probeActiveMode.uppercase()) {
-                            "DIODE" -> ProbeViewModel.Mode.DIODE
-                            "OHM" -> ProbeViewModel.Mode.OHM
-                            else -> ProbeViewModel.Mode.VOLT
-                        }
-                        probeViewModel.setProbeMode(mode)
-                        probeViewModel.startPolling()
-                        sendCommand("BUZZ_MULAI_ANALISA")
-                    },
+                    primaryActionButton("MULAI ANALISA", amber) { showChipsetFilterAndStartAnalysis("PROBE") },
                     secondaryActionButton("SIMPAN DATA", amber) { saveProbeSnapshot() },
                     secondaryActionButton("COMPARE", purple) { selectPage(DesktopPage.WAVEID) }
                 )
@@ -977,6 +987,7 @@ class RPhoneDesktopApp : Application() {
             isFocusTraversable = false
             isWrapText = true
             style = cardStyle()
+            isPickOnBounds = true
             graphic = VBox(4.0).apply {
                 alignment = Pos.CENTER
                 children.addAll(
@@ -986,6 +997,12 @@ class RPhoneDesktopApp : Application() {
                 )
             }
             setOnAction { action() }
+            setOnMouseClicked { evt ->
+                if (!evt.isConsumed) {
+                    evt.consume()
+                    action()
+                }
+            }
         }
     }
 
@@ -1065,7 +1082,7 @@ class RPhoneDesktopApp : Application() {
         }
         settingsStatus = label("Ready", textSecondary, 11.0, false)
 
-        val dtwThresholdLabel = label("100%", cyan, 14.0, true)
+        dtwThresholdLabel = label("${dtwThresholdPercent}%", cyan, 14.0, true)
 
         // AI provider settings
         val aiProviders = FXCollections.observableArrayList("liteLLM", "claude", "groq", "gemini")
@@ -1358,7 +1375,7 @@ class RPhoneDesktopApp : Application() {
                         actionButtonsRow(
                             secondaryActionButton("Fetch Models", purple) { refreshModelsFromProvider() },
                             primaryActionButton("SIMPAN KONFIGURASI AI", green) { saveAiConfig() },
-                            secondaryActionButton("DTW ${dtwThresholdLabel.text}", cyan) { notification.showMessage("Ambang DTW aktif: ${dtwThresholdLabel.text}") }
+                            secondaryActionButton("DTW ${dtwThresholdLabel.text}", cyan) { showDtwDialog() }
                         )
                     )
                 }),
@@ -1498,6 +1515,118 @@ class RPhoneDesktopApp : Application() {
             padding = Insets(0.0, 0.0, 2.0, 0.0)
             alignment = Pos.CENTER_LEFT
             children.addAll(pageTitle, pageBadge, Region().apply { HBox.setHgrow(this, Priority.ALWAYS) }, connectionStatus, connectionDevice)
+
+            // Add small window controls to page header so each page has working minimize/max/close
+            try {
+                val mini = Button("_").apply {
+                    style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+                    prefWidth = 28.0
+                    setOnAction { primaryStage.isIconified = true }
+                }
+                val maxi = Button("☐").apply {
+                    style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+                    prefWidth = 28.0
+                    setOnAction { primaryStage.isMaximized = !primaryStage.isMaximized }
+                }
+                val clos = Button("✕").apply {
+                    style = buttonStyle(red, "#111827", "#EF4444")
+                    prefWidth = 28.0
+                    setOnAction { primaryStage.close() }
+                }
+                children.addAll(mini, maxi, clos)
+            } catch (_: Exception) {
+                // ignore if stage not yet available in some contexts
+            }
+        }
+    }
+
+    private fun showDtwDialog() {
+        try {
+            val dialogStage = Stage()
+            dialogStage.initOwner(primaryStage)
+            dialogStage.initStyle(StageStyle.UTILITY)
+            dialogStage.title = "Set DTW Threshold"
+
+            val slider = Slider(90.0, 100.0, dtwThresholdPercent.toDouble()).apply {
+                isShowTickMarks = true
+                isShowTickLabels = true
+                majorTickUnit = 1.0
+                blockIncrement = 1.0
+            }
+            val label = Label("${dtwThresholdPercent}%").apply { style = "-fx-font-weight:bold; -fx-text-fill: #94A3B8;" }
+            slider.valueProperty().addListener { _, _, newV -> label.text = "${newV.toInt()}%" }
+
+            val ok = Button("OK").apply {
+                setOnAction {
+                    dtwThresholdPercent = slider.value.toInt()
+                    dtwThresholdLabel.text = "${dtwThresholdPercent}%"
+                    notification.showMessage("DTW threshold set to ${dtwThresholdPercent}%")
+                    dialogStage.close()
+                }
+            }
+            val root = VBox(12.0).apply {
+                padding = Insets(12.0)
+                children.addAll(label, slider, HBox(8.0).apply { children.addAll(Region().apply { HBox.setHgrow(this, Priority.ALWAYS) }, ok) })
+            }
+            dialogStage.scene = Scene(root)
+            dialogStage.show()
+        } catch (e: Exception) {
+            notification.showError("Gagal membuka dialog DTW: ${e.message}")
+        }
+    }
+
+    private fun showChipsetFilterAndStartAnalysis(mode: String) {
+        try {
+            val brands = listOf("Generic", "Samsung", "Xiaomi", "OPPO", "Vivo", "Realme", "Apple")
+            val dialog = javafx.scene.control.ChoiceDialog(brands.first(), brands)
+            dialog.title = "Filter Chipset"
+            dialog.headerText = "Pilih brand chipset (opsional) sebelum mulai analisa"
+            dialog.contentText = "Brand:"
+            val result = dialog.showAndWait()
+            result.ifPresent { selected ->
+                // persist selection into settings file for analysis context
+                scope.launch {
+                    val sjson = '{'.toString() // no-op placeholder; real persistence optional
+                }
+                // show progress indicator
+                usbAnalysisStatus.text = "Sedang analisa... ($selected)"
+                usbAnalysisStatus.isVisible = true
+                usbAnalysisStatus.isManaged = true
+                usbAnalysisProgress.progress = ProgressBar.INDETERMINATE_PROGRESS
+                usbAnalysisProgress.isVisible = true
+                usbAnalysisProgress.isManaged = true
+                // trigger device commands or probe start depending on page
+                when (mode.uppercase()) {
+                    "USB" -> sendCommands("SET_MODE_USB", "BUZZ_MULAI_ANALISA")
+                    "PSU" -> sendCommands("SET_MODE_PSU", "BUZZ_MULAI_ANALISA")
+                    "PROBE" -> {
+                        val modeEnum = when (probeActiveMode.uppercase()) {
+                            "DIODE" -> ProbeViewModel.Mode.DIODE
+                            "OHM" -> ProbeViewModel.Mode.OHM
+                            else -> ProbeViewModel.Mode.VOLT
+                        }
+                        probeViewModel.setProbeMode(modeEnum)
+                        probeViewModel.startPolling()
+                        sendCommand("BUZZ_MULAI_ANALISA")
+                    }
+                    else -> sendCommands("BUZZ_MULAI_ANALISA")
+                }
+            }
+        } catch (e: Exception) {
+            notification.showError("Gagal memulai analisa: ${e.message}")
+        }
+    }
+
+    private fun stopAnalysis() {
+        try {
+            sendCommand("BUZZ_STOP_ANALISA")
+            usbAnalysisProgress.isVisible = false
+            usbAnalysisProgress.isManaged = false
+            usbAnalysisStatus.isVisible = false
+            usbAnalysisStatus.isManaged = false
+            notification.showMessage("Analisa dihentikan")
+        } catch (e: Exception) {
+            notification.showError("Gagal stop analisa: ${e.message}")
         }
     }
 
