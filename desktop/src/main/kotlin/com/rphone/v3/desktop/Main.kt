@@ -656,8 +656,8 @@ class RPhoneDesktopApp : Application() {
             children.addAll(tabs, chartPanel(usbChartCanvas), chartFooter(cyan))
         }).apply {
             prefWidth = 700.0
-            minWidth = 700.0
-            maxWidth = 700.0
+            minWidth = 320.0
+            maxWidth = Double.MAX_VALUE
         }
 
         val actionPanel = card("Quick Action", VBox(8.0).apply {
@@ -690,8 +690,8 @@ class RPhoneDesktopApp : Application() {
 
         val leftColumn = VBox(10.0).apply {
             prefWidth = 430.0
-            minWidth = 430.0
-            maxWidth = 430.0
+            minWidth = 260.0
+            maxWidth = Double.MAX_VALUE
             children.addAll(
                 connectionCard("USB MODE", cyan),
                 card("USB Metrics", metrics),
@@ -808,8 +808,8 @@ class RPhoneDesktopApp : Application() {
             )
         }).apply {
             prefWidth = 700.0
-            minWidth = 700.0
-            maxWidth = 700.0
+            minWidth = 320.0
+            maxWidth = Double.MAX_VALUE
         }
 
         val topSplit = HBox(10.0).apply {
@@ -943,8 +943,8 @@ class RPhoneDesktopApp : Application() {
             hgap = 10.0
             vgap = 10.0
             prefWidth = 720.0
-            minWidth = 720.0
-            maxWidth = 720.0
+            minWidth = 320.0
+            maxWidth = Double.MAX_VALUE
             ColumnConstraints().apply { percentWidth = 50.0 }.also { columnConstraints.add(it) }
             ColumnConstraints().apply { percentWidth = 50.0 }.also { columnConstraints.add(it) }
             add(waveTile("🗂", "Rekam Baru", "Rekam arus boot HP") { sendCommand("BUZZ_REKAM_BARU"); recordWaveProfile() }, 0, 0)
@@ -956,8 +956,8 @@ class RPhoneDesktopApp : Application() {
         val rightPane = VBox(10.0).apply {
             children.addAll(tileGrid)
             prefWidth = 740.0
-            minWidth = 740.0
-            maxWidth = 740.0
+            minWidth = 320.0
+            maxWidth = Double.MAX_VALUE
         }
 
         val split = HBox(10.0).apply {
@@ -1729,11 +1729,11 @@ class RPhoneDesktopApp : Application() {
     private fun chartPanel(canvas: Canvas): Node {
         val wrapper = StackPane(canvas).apply {
             prefWidth = 700.0
-            minWidth = 700.0
-            maxWidth = 700.0
+            minWidth = 320.0
+            maxWidth = Double.MAX_VALUE
             prefHeight = 320.0
-            minHeight = 320.0
-            maxHeight = 320.0
+            minHeight = 200.0
+            maxHeight = Double.MAX_VALUE
             style = "-fx-background-color: #080C14; -fx-border-color: #131D2E; -fx-border-width: 1;"
         }
         canvas.widthProperty().bind(wrapper.widthProperty())
