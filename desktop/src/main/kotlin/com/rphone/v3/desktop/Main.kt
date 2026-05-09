@@ -1796,6 +1796,22 @@ class RPhoneDesktopApp : Application() {
                 setOnAction {
                     val selectedBrand = brandCombo.value ?: "Generic"
                     val selectedModel = modelCombo.value ?: ""
+                    // Ensure serial is connected before starting analysis. If not, try to auto-connect to selected device.
+                    if (!serial.isConnected()) {
+                        val preferred = deviceCombo.value
+                        if (preferred != null) {
+                            notification.showMessage("Menyambungkan ke ${preferred.name}...")
+                            connectTo(preferred)
+                            // give a short time for connection and receive loop to start
+                            kotlinx.coroutines.runBlocking { kotlinx.coroutines.delay(500L) }
+                        }
+                    }
+
+                    if (!serial.isConnected()) {
+                        notification.showError("Tidak terhubung ke device. Sambungkan device sebelum analisa.")
+                        return@setOnAction
+                    }
+
                     dialogStage.close()
                     usbAnalysisStatus.text = "Menunggu arus... ($selectedBrand ${if (selectedModel.isNotBlank()) selectedModel else "*"})"
                     usbAnalysisStatus.isVisible = true
@@ -2378,7 +2394,8 @@ class RPhoneDesktopApp : Application() {
         // allow responsive width when window is resized / maximized
         content.maxWidth = Double.MAX_VALUE
         return StackPane(content).apply {
-            padding = Insets(0.0, 12.0, 12.0, 12.0)
+            // add top padding so page headers are not obscured by window chrome
+            padding = Insets(12.0, 12.0, 12.0, 12.0)
             alignment = Pos.TOP_CENTER
         }
     }
