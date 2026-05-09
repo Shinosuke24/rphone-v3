@@ -68,12 +68,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.rphone.v3.desktop.viewmodel.ProbeViewModel
 import com.rphone.v3.desktop.viewmodel.UsbViewModel
 import com.rphone.v3.desktop.viewmodel.PsuViewModel
 import com.rphone.v3.desktop.viewmodel.UartViewModel
+import com.rphone.v3.desktop.database.ProfilArus
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -238,6 +240,30 @@ class RPhoneDesktopApp : Application() {
         }
     }
 
+    private data class ProbeCompareRow(
+        val no: Int,
+        val label: String,
+        val mode: String,
+        val refDisplay: String,
+        var liveDisplay: String = "—",
+        var status: String = "WAITING",
+        var isTarget: Boolean = false
+    )
+
+    private data class ProbeCompareSession(
+        val fileName: String,
+        val rows: MutableList<ProbeCompareRow>,
+        val rowList: javafx.collections.ObservableList<String>,
+        val statusLabel: Label,
+        val summaryLabel: Label,
+        val liveLabel: Label,
+        val stage: Stage,
+        var targetRowIndex: Int = 0,
+        var stableDisplay: String = "",
+        var stableStartMs: Long = 0L,
+        var countdownJob: Job? = null
+    )
+
     private data class DesktopWaveformState(
         var activeChannel: WaveChannel = WaveChannel.CURRENT,
         val currentBuf: ArrayDeque<Double> = ArrayDeque(300),
@@ -332,6 +358,7 @@ class RPhoneDesktopApp : Application() {
                         probeOhmLabel.text = reading.display
                     }
                 }
+                handleProbeCompareReading(reading)
             }
         }
         probeViewModel.onHistoryUpdate = { lines ->
@@ -826,6 +853,7 @@ class RPhoneDesktopApp : Application() {
     }
 
     private var probeCurrentFilter = "ALL"
+    private var probeCompareSession: ProbeCompareSession? = null
 
     private fun buildProbePage(): Node {
         probeValue = label("0.000", amber, 44.0, true).apply {
@@ -887,8 +915,8 @@ class RPhoneDesktopApp : Application() {
                 }),
                 actionButtonsRow(
                     primaryActionButton("MULAI ANALISA", amber) { showChipsetFilterAndStartAnalysis("PROBE") },
-                    secondaryActionButton("SIMPAN DATA", amber) { saveProbeSnapshot() },
-                    secondaryActionButton("COMPARE", purple) { selectPage(DesktopPage.WAVEID) }
+                    secondaryActionButton("SIMPAN DATA", amber) { showProbeSaveDialog() },
+                    secondaryActionButton("COMPARE", purple) { showProbeCompareFilePicker() }
                 )
             )
         }
@@ -930,6 +958,18 @@ class RPhoneDesktopApp : Application() {
             prefWidth = 420.0
             minWidth = 420.0
             children.addAll(
+                card("MODE", VBox(8.0).apply {
+                    children.addAll(
+                        tabRow(
+                            listOf(
+                                TabDef("USB", cyan) { setWaveModeFilter("USB") },
+                                TabDef("PSU", purple) { setWaveModeFilter("PSU") },
+                                TabDef("ALL", green) { setWaveModeFilter("ALL") }
+                            )
+                        ),
+                        label("Pilih mode dulu sebelum compare, sama seperti tab di APK.", textSecondary, 10.0, false)
+                    )
+                }),
                 card("WAVEID", VBox(6.0).apply {
                     children.addAll(
                         label("∿ WAVEID", green, 40.0 / 2.0, true),
@@ -948,7 +988,7 @@ class RPhoneDesktopApp : Application() {
             ColumnConstraints().apply { percentWidth = 50.0 }.also { columnConstraints.add(it) }
             ColumnConstraints().apply { percentWidth = 50.0 }.also { columnConstraints.add(it) }
             add(waveTile("🗂", "Rekam Baru", "Rekam arus boot HP") { sendCommand("BUZZ_REKAM_BARU"); recordWaveProfile() }, 0, 0)
-            add(waveTile("📁", "Database", "Lihat profil tersimpan") { sendCommand("BUZZ_BUKA_DB"); syncWaveDatabase(); loadWaveFiles() }, 1, 0)
+            add(waveTile("📁", "Database", "Lihat profil tersimpan") { sendCommand("BUZZ_BUKA_DB"); showWaveDatabaseDialog() }, 1, 0)
             add(waveTile("◫", "Bandingkan", "Overlay 2 waveform") { sendCommand("BUZZ_BANDINGKAN"); compareLatestWaveProfiles() }, 0, 1)
             add(waveTile("📥", "Import .rphp", "Tambah dari komunitas") { sendCommand("BUZZ_IMPORT"); importWaveLog() }, 1, 1)
         }
@@ -1561,6 +1601,10 @@ class RPhoneDesktopApp : Application() {
                 showUsbAnalysisDialog()
                 return
             }
+            if (mode.uppercase() == "PSU") {
+                showPsuAnalysisDialog()
+                return
+            }
             val brands = listOf("Generic", "Samsung", "Xiaomi", "OPPO", "Vivo", "Realme", "Apple")
             val dialog = javafx.scene.control.ChoiceDialog(brands.first(), brands)
             dialog.title = "Filter Chipset"
@@ -1568,39 +1612,116 @@ class RPhoneDesktopApp : Application() {
             dialog.contentText = "Brand:"
             val result = dialog.showAndWait()
             result.ifPresent { selected ->
-                // persist selection into settings file for analysis context
                 scope.launch {
                     val sjson = '{'.toString() // no-op placeholder; real persistence optional
                 }
-                // show progress indicator
                 usbAnalysisStatus.text = "Sedang analisa... ($selected)"
                 usbAnalysisStatus.isVisible = true
                 usbAnalysisStatus.isManaged = true
                 usbAnalysisProgress.progress = ProgressBar.INDETERMINATE_PROGRESS
                 usbAnalysisProgress.isVisible = true
                 usbAnalysisProgress.isManaged = true
-                // trigger device commands or probe start depending on page
-                when (mode.uppercase()) {
-                    "PSU" -> sendCommands("SET_MODE_PSU", "BUZZ_MULAI_ANALISA")
-                    "PROBE" -> {
-                        val modeEnum = when (probeActiveMode.uppercase()) {
-                            "DIODE" -> ProbeViewModel.Mode.DIODE
-                            "OHM" -> ProbeViewModel.Mode.OHM
-                            else -> ProbeViewModel.Mode.VOLT
-                        }
-                        probeViewModel.setProbeMode(modeEnum)
-                        probeViewModel.startPolling()
-                        sendCommand("BUZZ_MULAI_ANALISA")
-                    }
-                    else -> sendCommands("BUZZ_MULAI_ANALISA")
+                val modeEnum = when (probeActiveMode.uppercase()) {
+                    "DIODE" -> ProbeViewModel.Mode.DIODE
+                    "OHM" -> ProbeViewModel.Mode.OHM
+                    else -> ProbeViewModel.Mode.VOLT
                 }
-                // start background watcher that waits for incoming waveform then runs DTW match
-                scope.launch {
-                    performAnalysis(mode, selected)
-                }
+                probeViewModel.setProbeMode(modeEnum)
+                probeViewModel.startPolling()
+                sendCommand("BUZZ_MULAI_ANALISA")
+                scope.launch { performAnalysis(mode, selected) }
             }
         } catch (e: Exception) {
             notification.showError("Gagal memulai analisa: ${e.message}")
+        }
+    }
+
+    private fun showPsuAnalysisDialog() {
+        try {
+            val dialogStage = Stage()
+            dialogStage.initOwner(primaryStage)
+            dialogStage.initStyle(StageStyle.UNDECORATED)
+            dialogStage.title = "Mulai Analisa PSU"
+
+            val brands: List<String> = try { waveIdManager.getDistinctBrands("PSU") } catch (_: Exception) { emptyList() }
+            val brandChoices: List<String> = if (brands.isEmpty()) listOf("— Pilih Brand —") else (listOf("— Pilih Brand —") + brands.distinct())
+            val brandCombo = javafx.scene.control.ComboBox(FXCollections.observableArrayList(brandChoices)).apply {
+                value = brandChoices.first()
+                style = comboStyle()
+                prefWidth = 260.0
+            }
+            val modelChoices = FXCollections.observableArrayList("— Auto —")
+            val modelCombo = javafx.scene.control.ComboBox<String>(modelChoices).apply {
+                value = "— Auto —"
+                style = comboStyle()
+                isDisable = true
+                prefWidth = 260.0
+            }
+            val infoLabel = label("Pilih brand & model terlebih dahulu", textSecondary, 11.0, false)
+
+            fun refreshModelsForBrand(brand: String) {
+                if (brand == "— Pilih Brand —" || brand.isBlank()) {
+                    modelCombo.items.setAll("— Auto —")
+                    modelCombo.value = "— Auto —"
+                    modelCombo.isDisable = true
+                    infoLabel.text = "Pilih brand & model terlebih dahulu"
+                    infoLabel.setTextFill(Color.web("#475569"))
+                    return
+                }
+                val models = try { waveIdManager.getDistinctModels(brand, "PSU") } catch (_: Exception) { emptyList() }
+                val modelItems = if (models.isEmpty()) listOf("— Auto —") else listOf("— Auto —") + models.distinct()
+                modelCombo.items.setAll(modelItems)
+                modelCombo.value = "— Auto —"
+                modelCombo.isDisable = false
+                infoLabel.text = "✓ $brand dipilih — Auto: semua model, atau pilih spesifik"
+                infoLabel.setTextFill(Color.web("#10B981"))
+            }
+
+            brandCombo.valueProperty().addListener { _, _, newValue ->
+                refreshModelsForBrand(newValue ?: "")
+            }
+
+            refreshModelsForBrand(brandCombo.value ?: "")
+
+            val btnStart = Button("MULAI ANALISA").apply {
+                style = buttonStyle(cyan, "#111827", "#00D4FF")
+                isDisable = true
+            }
+
+            fun updateStartState() {
+                val brandOk = (brandCombo.value != null && brandCombo.value != "— Pilih Brand —")
+                if (!brandOk) {
+                    btnStart.isDisable = true
+                    return
+                }
+                btnStart.isDisable = false
+                btnStart.setOnAction {
+                    val selectedBrand = brandCombo.value ?: "— Pilih Brand —"
+                    val selectedModel = modelCombo.value?.takeIf { it != "— Auto —" } ?: ""
+                    dialogStage.close()
+                    usbAnalysisStatus.text = "Menunggu arus... ($selectedBrand ${if (selectedModel.isNotBlank()) selectedModel else "*"})"
+                    usbAnalysisStatus.isVisible = true
+                    usbAnalysisStatus.isManaged = true
+                    usbAnalysisProgress.progress = ProgressBar.INDETERMINATE_PROGRESS
+                    usbAnalysisProgress.isVisible = true
+                    usbAnalysisProgress.isManaged = true
+                    sendCommands("SET_MODE_PSU", "BUZZ_MULAI_ANALISA")
+                    scope.launch { performPsuAnalysisWithDetection(selectedBrand, selectedModel) }
+                }
+            }
+
+            brandCombo.valueProperty().addListener { _, _, _ -> updateStartState() }
+            modelCombo.valueProperty().addListener { _, _, _ -> updateStartState() }
+            updateStartState()
+
+            val layout = VBox(12.0).apply {
+                padding = Insets(12.0)
+                children.addAll(label("Filter Chipset", textPrimary, 14.0, true), brandCombo, modelCombo, infoLabel, btnStart)
+            }
+            dialogStage.scene = Scene(layout)
+            dialogStage.show()
+        } catch (e: Exception) {
+            notification.showError("Gagal tampil dialog PSU: ${e.message}")
         }
     }
 
@@ -1748,6 +1869,175 @@ class RPhoneDesktopApp : Application() {
                     usbAnalysisStatus.text = "Error: ${e.message}"
                     usbAnalysisProgress.isVisible = false
                     usbAnalysisProgress.isManaged = false
+                    notification.showError("Analisa gagal: ${e.message}")
+                }
+            }
+        }
+    }
+
+    private suspend fun performPsuAnalysisWithDetection(brand: String, model: String = "") {
+        withContext(Dispatchers.IO) {
+            try {
+                // FASE 1: Pre-analisa 10 detik sampling
+                val preBuffer = mutableListOf<Double>()
+                val DURASI_PRE = 10_000L
+                val INTERVAL = 200L
+                val iterasi = (DURASI_PRE / INTERVAL).toInt()
+                repeat(iterasi) {
+                    if (!isActive) return@withContext
+                    val curr = psuWaveState.currentBuf.lastOrNull() ?: lastKnownValue
+                    preBuffer.add(curr)
+                    kotlinx.coroutines.delay(INTERVAL)
+                }
+
+                val avgMaFinal = if (preBuffer.isNotEmpty()) preBuffer.map { it * 1000.0 }.average() else 0.0
+                val statusFinal = when {
+                    avgMaFinal > 300.0 -> "SHORT_HARD"
+                    avgMaFinal > 30.0 -> "SHORT_HALUS"
+                    else -> "NORMAL"
+                }
+                val adaShortFinal = statusFinal != "NORMAL"
+
+                withContext(Dispatchers.Main) {
+                    usbAnalysisStatus.text = when (statusFinal) {
+                        "SHORT_HARD" -> "⚠ SHORT HARD — avg ${avgMaFinal.toInt()}mA"
+                        "SHORT_HALUS" -> "⚡ SHORT HALUS — avg ${avgMaFinal.toInt()}mA"
+                        else -> "✓ Normal — avg ${avgMaFinal.toInt()}mA"
+                    }
+                    usbAnalysisStatus.isVisible = true
+                    usbAnalysisProgress.progress = ProgressBar.INDETERMINATE_PROGRESS
+                    usbAnalysisProgress.isVisible = true
+                }
+
+                // FASE 2: Menunggu trigger / jalur normal vs short
+                val samples: List<Double>
+                if (!adaShortFinal) {
+                    // Normal: tunggu trigger > 0.01A
+                    val TIMEOUT_NORMAL = 60_000L
+                    val startTime = System.currentTimeMillis()
+                    var triggered = false
+                    while (System.currentTimeMillis() - startTime < TIMEOUT_NORMAL && !triggered) {
+                        val currNow = psuWaveState.currentBuf.lastOrNull() ?: lastKnownValue
+                        if (currNow > 0.01) { triggered = true; break }
+                        kotlinx.coroutines.delay(200)
+                    }
+                    if (!triggered) {
+                        withContext(Dispatchers.Main) {
+                            usbAnalysisStatus.text = "⏱ Timeout — tidak ada arus booting terdeteksi"
+                            usbAnalysisProgress.isVisible = false
+                        }
+                        return@withContext
+                    }
+                    withContext(Dispatchers.Main) {
+                        usbAnalysisStatus.text = "Merekam waveform..."
+                    }
+                    samples = collectIncomingSamples(60_000L, 300)
+                    if (samples.isEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            usbAnalysisStatus.text = "Gagal merekam waveform"
+                            usbAnalysisProgress.isVisible = false
+                            notification.showError("Gagal merekam waveform dari PSU")
+                        }
+                        return@withContext
+                    }
+                } else {
+                    // SHORT path: wait device removed (curr -> 0), reattach, measure baseline, then wait spike
+                    // Langkah 1: tunggu arus <= 0.01
+                    while (true) {
+                        val currNow = psuWaveState.currentBuf.lastOrNull() ?: lastKnownValue
+                        if (currNow <= 0.01) break
+                        kotlinx.coroutines.delay(200)
+                    }
+                    // Langkah 2: tunggu arus > 0.01 (pasang kembali)
+                    while (true) {
+                        val currNow = psuWaveState.currentBuf.lastOrNull() ?: lastKnownValue
+                        if (currNow > 0.01) break
+                        kotlinx.coroutines.delay(200)
+                    }
+                    // Ukur baseline 2 detik
+                    val baselineBuffer = mutableListOf<Double>()
+                    repeat(10) {
+                        val currNow = psuWaveState.currentBuf.lastOrNull() ?: lastKnownValue
+                        baselineBuffer.add(currNow)
+                        kotlinx.coroutines.delay(200)
+                    }
+                    val baselineAvg = if (baselineBuffer.isNotEmpty()) baselineBuffer.average() else 0.0
+                    val baselinePeak = baselineBuffer.maxOrNull() ?: 0.0
+                    val triggerThreshold = maxOf(baselinePeak * 1.3, 0.05)
+
+                    withContext(Dispatchers.Main) {
+                        usbAnalysisStatus.text = "Mengukur baseline short..."
+                    }
+
+                    val TIMEOUT_SHORT = 30_000L
+                    val startTimeShort = System.currentTimeMillis()
+                    var triggered = false
+                    while (System.currentTimeMillis() - startTimeShort < TIMEOUT_SHORT && !triggered) {
+                        val currNow = psuWaveState.currentBuf.lastOrNull() ?: lastKnownValue
+                        if (currNow > triggerThreshold) { triggered = true; break }
+                        kotlinx.coroutines.delay(200)
+                    }
+                    if (!triggered) {
+                        withContext(Dispatchers.Main) {
+                            usbAnalysisStatus.text = "⏱ Tidak ada spike booting — menggunakan snapshot terakhir"
+                        }
+                        // attempt to collect a small sample set
+                        samples = collectIncomingSamples(5_000L, 1)
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            usbAnalysisStatus.text = "Merekam waveform (short-path)..."
+                        }
+                        samples = collectIncomingSamples(30_000L, 300)
+                    }
+                    if (samples.isEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            usbAnalysisStatus.text = "Gagal merekam waveform"
+                            usbAnalysisProgress.isVisible = false
+                            notification.showError("Gagal merekam waveform dari PSU")
+                        }
+                        return@withContext
+                    }
+                }
+
+                // FASE 3: DTW matching
+                val profiles = waveIdManager.getProfilesByMode("PSU")
+                val candidates = if (brand.equals("Generic", ignoreCase = true)) profiles else profiles.filter { it.brand.equals(brand, ignoreCase = true) && (model.isBlank() || it.model.equals(model, true)) }
+                if (candidates.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        usbAnalysisStatus.text = "Tidak ada profil untuk filter"
+                        usbAnalysisProgress.isVisible = false
+                        notification.showMessage("Tidak ada profil PSU untuk brand yang dipilih")
+                    }
+                    return@withContext
+                }
+
+                val results = candidates.map { p -> Pair(p, waveSimilarity(samples.map { it.toDouble() }, p.getWaveformArray().map { it.toDouble() })) }.sortedByDescending { it.second }
+                val threshold = dtwThresholdPercent.toDouble()
+                val matches = results.filter { it.second >= threshold }
+
+                withContext(Dispatchers.Main) {
+                    val lines = if (matches.isNotEmpty()) {
+                        buildList {
+                            add("Hasil Analisa: ${formatNumber(matches.first().second, 1)}%")
+                            add("")
+                            matches.take(5).forEachIndexed { i, (prof, sim) -> add("${i+1}. ${prof.brand} ${prof.model} — ${formatNumber(sim,1)}%") }
+                        }
+                    } else {
+                        buildList {
+                            add("Tidak ada kecocokan >= ${threshold}%")
+                            add("")
+                            results.take(5).forEachIndexed { i, (prof, sim) -> add("${i+1}. ${prof.brand} ${prof.model} — ${formatNumber(sim,1)}%") }
+                        }
+                    }
+                    waveHistoryList.items.setAll(lines)
+                    usbAnalysisStatus.text = "Selesai"
+                    usbAnalysisProgress.isVisible = false
+                    notification.showSuccess("Analisa PSU selesai")
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    usbAnalysisStatus.text = "Error: ${e.message}"
+                    usbAnalysisProgress.isVisible = false
                     notification.showError("Analisa gagal: ${e.message}")
                 }
             }
@@ -2580,18 +2870,72 @@ class RPhoneDesktopApp : Application() {
         drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple)
     }
 
-    private fun saveProbeSnapshot() {
+    private fun showProbeSaveDialog() {
+        val dialogStage = Stage()
+        dialogStage.initOwner(primaryStage)
+        dialogStage.initStyle(StageStyle.UNDECORATED)
+        dialogStage.title = "Simpan Data Probe"
+
+        val titleLabel = label("SIMPAN DATA PROBE", cyan, 16.0, true)
+        val connectorField = TextField().apply {
+            promptText = "Nama konektor (misal: J701, FPC Display)"
+            style = controlStyle()
+        }
+        val saveButton = Button("SIMPAN KE FILE").apply {
+            style = buttonStyle(cyan, "#111827", "#00D4FF")
+            setOnAction {
+                val connectorName = connectorField.text.trim().ifBlank { "konektor" }
+                dialogStage.close()
+                saveProbeSnapshot(connectorName)
+            }
+        }
+        val cancelButton = Button("BATAL").apply {
+            style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+            setOnAction { dialogStage.close() }
+        }
+
+        val root = VBox(12.0).apply {
+            padding = Insets(14.0)
+            style = "-fx-background-color: #0D1423; -fx-border-color: #F59E0B; -fx-border-width: 1; -fx-background-radius: 18; -fx-border-radius: 18;"
+            children.addAll(
+                titleLabel,
+                connectorField,
+                HBox(10.0).apply {
+                    children.addAll(
+                        cancelButton,
+                        Region().apply { HBox.setHgrow(this, Priority.ALWAYS) },
+                        saveButton
+                    )
+                }
+            )
+        }
+
+        dialogStage.scene = Scene(root)
+        dialogStage.show()
+    }
+
+    private fun saveProbeSnapshot(connectorName: String) {
         scope.launch {
-            val modePrefix = probeModeLabel.text.take(3).uppercase()
-            val filename = "probe-${modePrefix}-${LocalTime.now().format(DateTimeFormatter.ofPattern("HHmmss"))}.txt"
+            val safeConnector = connectorName
+                .trim()
+                .replace(Regex("[^A-Za-z0-9._-]+"), "_")
+                .trim('_')
+                .ifBlank { "konektor" }
+            val filename = "probe_${safeConnector}_${LocalTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))}.csv"
             val payload = buildString {
-                appendLine("R-Phone V3 Probe Snapshot")
-                appendLine("Time: ${LocalTime.now()}")
-                appendLine("Value: ${probeValue.text}")
-                appendLine("Mode: ${probeModeLabel.text}")
-                appendLine("Type: ${if (isProbeTypePasif(probeModeLabel.text)) "PASIF" else "AKTIF"}")
+                appendLine("Konektor,$connectorName")
+                appendLine("Tanggal,${LocalTime.now()}")
                 appendLine()
-                append(receiveBuffer.toString())
+                appendLine("No,Kaki,Mode,Nilai")
+                val allItems = (probeHistoryAktif + probeHistoryPasif).sortedBy { it.timestampMs }
+                allItems.forEachIndexed { index, item ->
+                    val kaki = when {
+                        item.label.isNotBlank() && item.label != "GND" -> item.label
+                        item.display == "GND" || item.label == "GND" -> "GND"
+                        else -> "Kaki ${index + 1}"
+                    }
+                    appendLine("${index + 1},$kaki,${item.mode.name},${item.display}")
+                }
             }
             val ok = storage.save(filename, payload)
             withContext(Dispatchers.Main) {
@@ -2636,6 +2980,444 @@ class RPhoneDesktopApp : Application() {
         }
     }
 
+    private fun showProbeCompareFilePicker() {
+        scope.launch {
+            val files = storage.listFiles()
+                .filter { it.startsWith("probe_") && it.endsWith(".csv", ignoreCase = true) }
+                .sortedDescending()
+
+            withContext(Dispatchers.Main) {
+                if (files.isEmpty()) {
+                    notification.showMessage("Tidak ada file probe tersimpan")
+                    return@withContext
+                }
+
+                val dialogStage = Stage()
+                dialogStage.initOwner(primaryStage)
+                dialogStage.initStyle(StageStyle.UNDECORATED)
+                dialogStage.title = "Pilih File Referensi Probe"
+
+                val fileList = ListView(FXCollections.observableArrayList(files)).apply {
+                    prefHeight = 360.0
+                    style = historyListStyle()
+                }
+                val infoLabel = label("Klik 2x untuk membuka, atau pilih lalu tekan HAPUS.", textSecondary, 10.0, false)
+
+                fun loadSelectedFile() {
+                    val selected = fileList.selectionModel.selectedItem ?: return
+                    dialogStage.close()
+                    loadProbeCompareFile(selected)
+                }
+
+                fileList.setOnMouseClicked { ev ->
+                    if (ev.clickCount >= 2) {
+                        loadSelectedFile()
+                    }
+                }
+
+                val loadButton = Button("BUKA").apply {
+                    style = buttonStyle(green, "#111827", "#10B981")
+                    setOnAction { loadSelectedFile() }
+                }
+                val deleteButton = Button("HAPUS").apply {
+                    style = buttonStyle(red, "#111827", "#EF4444")
+                    setOnAction {
+                        val selected = fileList.selectionModel.selectedItem
+                        if (selected.isNullOrBlank()) {
+                            notification.showMessage("Pilih file dulu")
+                            return@setOnAction
+                        }
+                        scope.launch {
+                            val deleted = storage.delete(selected)
+                            withContext(Dispatchers.Main) {
+                                if (deleted) {
+                                    notification.showSuccess("File dihapus: $selected")
+                                    showProbeCompareFilePicker()
+                                    dialogStage.close()
+                                } else {
+                                    notification.showError("Gagal hapus file")
+                                }
+                            }
+                        }
+                    }
+                }
+                val cancelButton = Button("BATAL").apply {
+                    style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+                    setOnAction { dialogStage.close() }
+                }
+
+                val root = VBox(12.0).apply {
+                    padding = Insets(14.0)
+                    style = "-fx-background-color: #0D1423; -fx-border-color: #F59E0B; -fx-border-width: 1; -fx-background-radius: 18; -fx-border-radius: 18;"
+                    children.addAll(
+                        label("PILIH REFERENSI PROBE", amber, 18.0, true),
+                        infoLabel,
+                        fileList,
+                        HBox(10.0).apply {
+                            children.addAll(
+                                cancelButton,
+                                deleteButton,
+                                Region().apply { HBox.setHgrow(this, Priority.ALWAYS) },
+                                loadButton
+                            )
+                        }
+                    )
+                }
+
+                dialogStage.scene = Scene(root)
+                dialogStage.show()
+            }
+        }
+    }
+
+    private fun loadProbeCompareFile(filename: String) {
+        scope.launch {
+            val raw = storage.load(filename).orEmpty()
+            val rows = parseProbeCompareRows(raw)
+            withContext(Dispatchers.Main) {
+                if (rows.size < 1) {
+                    notification.showError("File referensi tidak valid")
+                    return@withContext
+                }
+                openProbeCompareStage(filename, rows)
+            }
+        }
+    }
+
+    private fun parseProbeCompareRows(raw: String): MutableList<ProbeCompareRow> {
+        val rows = mutableListOf<ProbeCompareRow>()
+        var inDataSection = false
+        var rowCounter = 0
+
+        raw.lineSequence().forEach { line ->
+            val trimmed = line.trim()
+            if (trimmed.equals("No,Kaki,Mode,Nilai", ignoreCase = true)) {
+                inDataSection = true
+                return@forEach
+            }
+            if (!inDataSection) return@forEach
+            val parts = trimmed.split(",")
+            if (parts.size >= 4) {
+                rowCounter += 1
+                rows.add(
+                    ProbeCompareRow(
+                        no = rowCounter,
+                        label = parts[1].trim(),
+                        mode = parts[2].trim(),
+                        refDisplay = parts[3].trim()
+                    )
+                )
+            }
+        }
+        return rows
+    }
+
+    private fun openProbeCompareStage(fileName: String, rows: MutableList<ProbeCompareRow>) {
+        probeCompareSession?.countdownJob?.cancel()
+
+        val stage = Stage()
+        stage.initOwner(primaryStage)
+        stage.initStyle(StageStyle.UNDECORATED)
+        stage.title = "Bandingkan Probe"
+
+        val rowItems = FXCollections.observableArrayList<String>()
+        val statusLabel = label("Load referensi untuk mulai compare", textSecondary, 11.0, false)
+        val summaryLabel = label("", textSecondary, 11.0, true)
+        val liveLabel = label("—", cyan, 30.0, true)
+        val rowList = ListView(rowItems).apply {
+            prefHeight = 420.0
+            style = historyListStyle()
+        }
+
+        val session = ProbeCompareSession(
+            fileName = fileName,
+            rows = rows,
+            rowList = rowItems,
+            statusLabel = statusLabel,
+            summaryLabel = summaryLabel,
+            liveLabel = liveLabel,
+            stage = stage
+        )
+        probeCompareSession = session
+
+        val resetButton = Button("RESET LIVE").apply {
+            style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+            setOnAction {
+                resetProbeCompareSession(session)
+                renderProbeCompareSession(session)
+                statusLabel.text = "Tempelkan probe → otomatis masuk setelah 1 detik"
+                statusLabel.setTextFill(green)
+            }
+        }
+
+        val closeButton = Button("TUTUP").apply {
+            style = buttonStyle(red, "#111827", "#EF4444")
+            setOnAction {
+                probeCompareSession?.countdownJob?.cancel()
+                probeCompareSession = null
+                stage.close()
+            }
+        }
+
+        val root = VBox(12.0).apply {
+            padding = Insets(14.0)
+            style = "-fx-background-color: #0D1423; -fx-border-color: #00D4FF; -fx-border-width: 1; -fx-background-radius: 18; -fx-border-radius: 18;"
+            children.addAll(
+                label("PROBE COMPARE", cyan, 18.0, true),
+                label(fileName, textSecondary, 11.0, false),
+                HBox(8.0).apply {
+                    children.addAll(
+                        VBox(4.0).apply {
+                            children.addAll(label("LIVE", textSecondary, 10.0, true), liveLabel)
+                        },
+                        Region().apply { HBox.setHgrow(this, Priority.ALWAYS) },
+                        VBox(4.0).apply {
+                            children.addAll(label("STATUS", textSecondary, 10.0, true), statusLabel)
+                        }
+                    )
+                },
+                summaryLabel,
+                rowList,
+                HBox(8.0).apply {
+                    children.addAll(
+                        resetButton,
+                        Region().apply { HBox.setHgrow(this, Priority.ALWAYS) },
+                        closeButton
+                    )
+                }
+            )
+        }
+
+        stage.scene = Scene(root)
+        stage.setOnHidden {
+            if (probeCompareSession?.stage == stage) {
+                probeCompareSession?.countdownJob?.cancel()
+                probeCompareSession = null
+            }
+        }
+        stage.show()
+
+        updateProbeCompareTargetHighlight(session)
+        renderProbeCompareSession(session)
+        if (rows.isNotEmpty()) {
+            statusLabel.text = "Tempelkan probe ke kaki pertama"
+            statusLabel.setTextFill(amber)
+        }
+    }
+
+    private fun resetProbeCompareSession(session: ProbeCompareSession) {
+        resetProbeCompareStable(session)
+        session.rows.forEachIndexed { index, row ->
+            session.rows[index] = row.copy(liveDisplay = "—", status = "WAITING", isTarget = false)
+        }
+        session.targetRowIndex = 0
+        updateProbeCompareTargetHighlight(session)
+        updateProbeCompareSummary(session)
+        session.liveLabel.text = "—"
+    }
+
+    private fun handleProbeCompareReading(reading: ProbeViewModel.ProbeReading) {
+        val session = probeCompareSession ?: return
+        if (session.rows.isEmpty()) return
+
+        val display = reading.display
+        val modeName = reading.mode.name
+        session.liveLabel.text = display
+
+        if (display == "OL" || display == "OPEN" || display == "SHORT" || display == "—") {
+            resetProbeCompareStable(session)
+            return
+        }
+
+        val idx = session.rows.indexOfFirst { row ->
+            row.liveDisplay == "—" && row.mode.equals(modeName, ignoreCase = true)
+        }
+        if (idx < 0) {
+            resetProbeCompareStable(session)
+            session.statusLabel.text = if (session.rows.any { it.liveDisplay == "—" }) {
+                "Ganti mode probe untuk kaki lainnya"
+            } else {
+                "✅ Semua kaki selesai dibandingkan"
+            }
+            session.statusLabel.setTextFill(green)
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        if (display != session.stableDisplay) {
+            session.stableDisplay = display
+            session.stableStartMs = now
+            showProbeCompareCountdown(session)
+            return
+        }
+
+        if (now - session.stableStartMs >= 1000L) {
+            captureProbeCompareRow(session, idx, display)
+        }
+    }
+
+    private fun showProbeCompareCountdown(session: ProbeCompareSession) {
+        session.countdownJob?.cancel()
+        session.countdownJob = scope.launch {
+            val step = 100L
+            var elapsed = 0L
+            while (elapsed < 1000L && probeCompareSession == session) {
+                val remaining = ((1000L - elapsed) / 1000f)
+                withContext(Dispatchers.Main) {
+                    session.statusLabel.text = "Tahan probe... ${String.format(java.util.Locale.US, "%.1f", remaining)}s"
+                    session.statusLabel.setTextFill(amber)
+                }
+                kotlinx.coroutines.delay(step)
+                elapsed += step
+            }
+        }
+    }
+
+    private fun captureProbeCompareRow(session: ProbeCompareSession, idx: Int, display: String) {
+        session.countdownJob?.cancel()
+        val ref = session.rows[idx]
+        val liveDisplay = if (isProbeGnd(display)) "GND" else display
+        session.rows[idx] = ref.copy(
+            liveDisplay = liveDisplay,
+            status = compareProbeValues(ref.refDisplay, liveDisplay, ref.mode).name,
+            isTarget = false
+        )
+
+        val targetIndex = session.rows.indexOfFirst { row ->
+            row.liveDisplay == "—" && row.mode.equals(session.rows[idx].mode, ignoreCase = true)
+        }
+        session.targetRowIndex = targetIndex
+        session.stableDisplay = ""
+        session.stableStartMs = Long.MAX_VALUE
+
+        updateProbeCompareTargetHighlight(session)
+        renderProbeCompareSession(session)
+        updateProbeCompareSummary(session)
+
+        if (targetIndex >= 0) {
+            session.statusLabel.text = "Tempelkan probe ke kaki berikutnya"
+            session.statusLabel.setTextFill(green)
+            runLaterIfNeeded {
+                session.rowList[targetIndex] = session.rowList[targetIndex]
+            }
+        } else {
+            val remaining = session.rows.any { it.liveDisplay == "—" }
+            session.statusLabel.text = if (remaining) {
+                "Ganti mode probe untuk kaki lainnya"
+            } else {
+                "✅ Semua kaki selesai dibandingkan"
+            }
+            session.statusLabel.setTextFill(green)
+        }
+    }
+
+    private fun resetProbeCompareStable(session: ProbeCompareSession) {
+        session.countdownJob?.cancel()
+        session.stableDisplay = ""
+        session.stableStartMs = 0L
+    }
+
+    private fun renderProbeCompareSession(session: ProbeCompareSession) {
+        updateProbeCompareTargetHighlight(session)
+        val lines = session.rows.map { row ->
+            val targetMark = if (row.isTarget) ">" else " "
+            val statusMark = when (row.status) {
+                "OK" -> "OK"
+                "BEDA" -> "BEDA"
+                else -> "WAIT"
+            }
+            "$targetMark ${row.no}. ${row.label} | ${row.mode} | REF: ${row.refDisplay} | LIVE: ${row.liveDisplay} | $statusMark"
+        }
+        session.rowList.setAll(lines)
+        updateProbeCompareSummary(session)
+    }
+
+    private fun updateProbeCompareSummary(session: ProbeCompareSession) {
+        val total = session.rows.size
+        val ok = session.rows.count { it.status == "OK" }
+        val beda = session.rows.count { it.status == "BEDA" }
+        val wait = session.rows.count { it.status == "WAITING" }
+        session.summaryLabel.text = "✅ $ok  ❌ $beda  ⏳ $wait / $total"
+        session.summaryLabel.setTextFill(if (beda > 0) red else green)
+    }
+
+    private fun updateProbeCompareTargetHighlight(session: ProbeCompareSession) {
+        if (session.rows.isEmpty()) return
+        var changed = false
+        session.rows.forEachIndexed { index, row ->
+            val shouldTarget = row.liveDisplay == "—"
+                && row.mode.equals(probeActiveMode, ignoreCase = true)
+                && index == session.rows.indexOfFirst { it.liveDisplay == "—" && it.mode.equals(probeActiveMode, ignoreCase = true) }
+            if (row.isTarget != shouldTarget) {
+                session.rows[index] = row.copy(isTarget = shouldTarget)
+                changed = true
+            }
+        }
+        if (changed) {
+            val targetIndex = session.rows.indexOfFirst { it.isTarget }
+            if (targetIndex >= 0 && targetIndex < session.rowList.size) {
+                session.rowList[targetIndex] = session.rowList[targetIndex]
+            }
+        }
+    }
+
+    private fun compareProbeValues(ref: String, live: String, mode: String): ProbeCompareStatus {
+        val refGnd = isProbeGnd(ref)
+        val liveGnd = isProbeGnd(live)
+        if (refGnd && liveGnd) return ProbeCompareStatus.OK
+        if (refGnd || liveGnd) return ProbeCompareStatus.BEDA
+        if (ref == "OL" && live == "OL") return ProbeCompareStatus.OK
+        if (ref == "OL" || live == "OL") return ProbeCompareStatus.BEDA
+
+        val refVal = parseProbeNumericValue(ref) ?: return ProbeCompareStatus.BEDA
+        val liveVal = parseProbeNumericValue(live) ?: return ProbeCompareStatus.BEDA
+
+        if (refVal == 0f && liveVal == 0f) return ProbeCompareStatus.OK
+        if (refVal == 0f) return ProbeCompareStatus.BEDA
+
+        val tolerance = when (mode.uppercase()) {
+            "VOLT" -> 0.10f
+            "DIODE" -> 0.20f
+            "OHM" -> 0.25f
+            else -> 0.15f
+        }
+        val ratio = kotlin.math.abs(liveVal - refVal) / refVal
+        return if (ratio <= tolerance) ProbeCompareStatus.OK else ProbeCompareStatus.BEDA
+    }
+
+    private fun isProbeGnd(value: String): Boolean {
+        return value == "GND" || value == "0Ω" || value == "0.0Ω" || value == "0.00 V" || value == "0.000 V" || value == "0mV"
+    }
+
+    private fun parseProbeNumericValue(display: String): Float? {
+        return try {
+            val cleaned = display
+                .replace("mV", "")
+                .replace("KΩ", "e3")
+                .replace("MΩ", "e6")
+                .replace("Ω", "")
+                .replace("V", "")
+                .replace("GND", "0")
+                .trim()
+            cleaned.toFloat()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private enum class ProbeCompareStatus {
+        OK,
+        BEDA
+    }
+
+    private fun runLaterIfNeeded(action: () -> Unit) {
+        if (Platform.isFxApplicationThread()) {
+            action()
+        } else {
+            Platform.runLater(action)
+        }
+    }
+
     private fun isProbeTypePasif(mode: String): Boolean {
         return mode.equals("OHM", ignoreCase = true) || mode.equals("DIODA", ignoreCase = true)
     }
@@ -2659,10 +3441,10 @@ class RPhoneDesktopApp : Application() {
                 inMemory
             } else {
                 // fallback to file snapshots when history has not been built yet
-                val allFiles = storage.listFiles().filter { it.startsWith("probe-") && (it.endsWith(".txt") || it.endsWith(".json")) }
+                val allFiles = storage.listFiles().filter { it.startsWith("probe_") && it.endsWith(".csv") }
                 when (probeCurrentFilter) {
-                    "PASIF" -> allFiles.filter { it.contains("-OHM-") || it.contains("-DIO-") || it.contains("-DIO") }
-                    "AKTIF" -> allFiles.filter { it.contains("-VOL-") || it.contains("-TEG-") || it.contains("-VOL") }
+                    "PASIF" -> allFiles.filter { it.contains("OHM", true) || it.contains("DIO", true) }
+                    "AKTIF" -> allFiles.filter { it.contains("VOL", true) || it.contains("TEG", true) }
                     else -> allFiles
                 }.sortedDescending()
             }
@@ -3028,49 +3810,803 @@ class RPhoneDesktopApp : Application() {
 
     private fun compareLatestWaveProfiles() {
         scope.launch {
-            val profiles = waveIdManager.getProfilesByMode(waveModeFilter.ifEmpty { "USB" })
+            val mode = waveModeFilter.takeIf { it.isNotBlank() && it != "ALL" } ?: "USB"
+            val profiles = waveIdManager.getProfilesByMode(mode)
             if (profiles.size < 2) {
                 withContext(Dispatchers.Main) {
-                    notification.showError("Butuh minimal 2 profil untuk compare")
+                    notification.showError("Butuh minimal 2 profil untuk compare mode $mode")
                 }
                 return@launch
             }
-
-            val queryProfile = profiles.first()
-            val queryWaveform = queryProfile.getWaveformArray()
-            if (queryWaveform.isEmpty()) {
-                withContext(Dispatchers.Main) {
-                    notification.showError("Profil query tidak memiliki data waveform")
-                }
-                return@launch
-            }
-
-            val referenceProfiles = profiles.drop(1)
-            val matches = waveIdManager.compareWaveforms(
-                queryWaveform.map { it.toDouble() },
-                queryProfile.puncakArus.toDouble(),
-                queryProfile.rataArus.toDouble(),
-                referenceProfiles
-            )
-
-            val bestMatches = matches.take(5)
-            val diagnosis = waveIdManager.generateDiagnosis(bestMatches, 75.0)
 
             withContext(Dispatchers.Main) {
-                waveHistoryList.items.setAll(
-                    buildList {
-                        add("WAVEID COMPARISON RESULT")
-                        add("Query: ${queryProfile.brand} ${queryProfile.model}")
-                        add("")
-                        bestMatches.forEachIndexed { index, match ->
-                            add("${index + 1}. Similarity: ${formatNumber(match.similarity, 1)}%")
-                            add("  ${match.brand} ${match.model} - ${match.kondisi}")
+                showWaveComparisonDialog(mode, profiles)
+            }
+        }
+    }
+
+    private fun showWaveDatabaseDialog() {
+        val dialogStage = Stage()
+        dialogStage.initOwner(primaryStage)
+        dialogStage.initStyle(StageStyle.UNDECORATED)
+        dialogStage.title = "Database WaveID"
+
+        val searchField = TextField().apply {
+            promptText = "Cari brand, model, atau kondisi"
+            style = controlStyle()
+        }
+        val infoLabel = label("Memuat database...", textSecondary, 11.0, false)
+        val listView = ListView(FXCollections.observableArrayList<String>()).apply {
+            prefHeight = 420.0
+            style = historyListStyle()
+        }
+        val detailLabel = label("Pilih profil untuk melihat detail", textSecondary, 11.0, false)
+        var cachedProfiles = emptyList<ProfilArus>()
+        var selectedProfile: ProfilArus? = null
+
+        fun formatProfileLine(profile: ProfilArus): String {
+            val tanggal = try {
+                if (profile.tanggal > 0L) {
+                    java.time.Instant.ofEpochMilli(profile.tanggal)
+                        .atZone(java.time.ZoneId.systemDefault())
+                        .toLocalDate()
+                        .toString()
+                } else {
+                    "N/A"
+                }
+            } catch (_: Exception) {
+                "N/A"
+            }
+            return "${profile.brand} ${profile.model} | ${profile.kondisi} | ${profile.modeRekam} | $tanggal"
+        }
+
+        fun refreshList(query: String = searchField.text.orEmpty()) {
+            scope.launch {
+                val profiles = withContext(Dispatchers.IO) {
+                    if (query.isBlank()) {
+                        waveIdManager.getAllProfiles()
+                    } else {
+                        waveIdManager.searchProfiles(query.trim())
+                    }
+                }
+                cachedProfiles = profiles
+                withContext(Dispatchers.Main) {
+                    infoLabel.text = if (query.isBlank()) {
+                        "${profiles.size} profil tersimpan"
+                    } else {
+                        "${profiles.size} hasil untuk \"${query.trim()}\""
+                    }
+                    listView.items.setAll(profiles.map { formatProfileLine(it) })
+                    selectedProfile = profiles.firstOrNull()
+                    detailLabel.text = selectedProfile?.let { buildWaveProfileDetail(it) } ?: "Pilih profil untuk melihat detail"
+                }
+            }
+        }
+
+        fun exportSelectedProfile(profile: ProfilArus) {
+            scope.launch {
+                val filename = "wave_${profile.brand}_${profile.model}_${LocalTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))}.zip"
+                val outputDir = File(System.getProperty("user.home"), "Downloads")
+                val zipPath = File(outputDir, filename)
+                val ok = com.rphone.v3.desktop.util.RphpHandler.exportProfiles(listOf(profile), zipPath.absolutePath)
+                withContext(Dispatchers.Main) {
+                    if (ok) {
+                        notification.showSuccess("Backup tersimpan: ${zipPath.name}")
+                    } else {
+                        notification.showError("Gagal membuat backup")
+                    }
+                }
+            }
+        }
+
+        fun importZipFile() {
+            val chooser = FileChooser().apply {
+                title = "Import WaveID ZIP"
+                extensionFilters.add(FileChooser.ExtensionFilter("ZIP files", "*.zip"))
+            }
+            val file = chooser.showOpenDialog(dialogStage)
+            if (file == null || !file.exists()) return
+            scope.launch {
+                val ok = waveIdManager.restoreFromZip(file.absolutePath)
+                withContext(Dispatchers.Main) {
+                    if (ok) {
+                        notification.showSuccess("Import ZIP berhasil")
+                        refreshList()
+                    } else {
+                        notification.showError("Import ZIP gagal")
+                    }
+                }
+            }
+        }
+
+        fun syncFromServer() {
+            scope.launch {
+                withContext(Dispatchers.Main) {
+                    notification.showMessage("Sync server dimulai...")
+                }
+                syncWaveDatabase()
+                kotlinx.coroutines.delay(2500)
+                withContext(Dispatchers.Main) {
+                    refreshList(searchField.text.orEmpty())
+                }
+            }
+        }
+
+        fun openEditDialog(profile: ProfilArus) {
+            val editStage = Stage()
+            editStage.initOwner(dialogStage)
+            editStage.initStyle(StageStyle.UNDECORATED)
+            editStage.title = "Edit Profil"
+
+            val brandField = TextField(profile.brand).apply { style = controlStyle() }
+            val modelField = TextField(profile.model).apply { style = controlStyle() }
+            val kondisiField = TextField(profile.kondisi).apply { style = controlStyle() }
+            val usernameField = TextField(profile.username).apply { style = controlStyle() }
+            val connectorField = TextField(profile.namaKonektor).apply { style = controlStyle() }
+
+            val modeCombo = ComboBox(FXCollections.observableArrayList("USB", "PSU")).apply {
+                style = comboStyle()
+                value = profile.modeRekam.ifBlank { "USB" }
+            }
+            val saveButton = Button("SIMPAN").apply {
+                style = buttonStyle(green, "#111827", "#10B981")
+                setOnAction {
+                    val updated = profile.copy(
+                        brand = brandField.text.trim(),
+                        model = modelField.text.trim(),
+                        kondisi = kondisiField.text.trim(),
+                        username = usernameField.text.trim(),
+                        namaKonektor = connectorField.text.trim(),
+                        modeRekam = modeCombo.value ?: profile.modeRekam
+                    )
+                    if (updated.brand.isBlank() || updated.model.isBlank() || updated.kondisi.isBlank()) {
+                        notification.showError("Brand, model, dan kondisi wajib diisi")
+                        return@setOnAction
+                    }
+                    scope.launch {
+                        waveIdManager.updateProfile(updated)
+                        withContext(Dispatchers.Main) {
+                            notification.showSuccess("Profil diperbarui")
+                            editStage.close()
+                            refreshList(searchField.text.orEmpty())
                         }
-                        add("")
-                        add("DIAGNOSIS: $diagnosis")
+                    }
+                }
+            }
+            val cancelButton = Button("BATAL").apply {
+                style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+                setOnAction { editStage.close() }
+            }
+
+            val root = VBox(10.0).apply {
+                padding = Insets(14.0)
+                style = "-fx-background-color: #0D1423; -fx-border-color: #6D28D9; -fx-border-width: 1; -fx-background-radius: 18; -fx-border-radius: 18;"
+                children.addAll(
+                    label("EDIT PROFIL", purple, 18.0, true),
+                    brandField,
+                    modelField,
+                    kondisiField,
+                    usernameField,
+                    connectorField,
+                    modeCombo,
+                    HBox(8.0).apply {
+                        children.addAll(
+                            cancelButton,
+                            Region().apply { HBox.setHgrow(this, Priority.ALWAYS) },
+                            saveButton
+                        )
                     }
                 )
-                notification.showSuccess("DTW Comparison selesai: ${formatNumber(bestMatches.firstOrNull()?.similarity ?: 0.0, 1)}% cocok")
+            }
+
+            editStage.scene = Scene(root)
+            editStage.show()
+        }
+
+        val deleteButton = Button("HAPUS").apply {
+            style = buttonStyle(red, "#111827", "#EF4444")
+            setOnAction {
+                val profile = selectedProfile
+                if (profile == null) {
+                    notification.showMessage("Pilih profil terlebih dahulu")
+                    return@setOnAction
+                }
+                scope.launch {
+                    waveIdManager.deleteProfile(profile.id)
+                    withContext(Dispatchers.Main) {
+                        notification.showSuccess("Profil dihapus")
+                        refreshList(searchField.text.orEmpty())
+                    }
+                }
+            }
+        }
+
+        val editButton = Button("EDIT").apply {
+            style = buttonStyle(cyan, "#111827", "#00D4FF")
+            setOnAction {
+                val profile = selectedProfile
+                if (profile == null) {
+                    notification.showMessage("Pilih profil terlebih dahulu")
+                    return@setOnAction
+                }
+                openEditDialog(profile)
+            }
+        }
+
+        val backupButton = Button("BACKUP ZIP").apply {
+            style = buttonStyle(purple, "#111827", "#A78BFA")
+            setOnAction {
+                val profile = selectedProfile
+                if (profile == null) {
+                    notification.showMessage("Pilih profil terlebih dahulu")
+                    return@setOnAction
+                }
+                exportSelectedProfile(profile)
+            }
+        }
+
+        val importButton = Button("IMPORT ZIP").apply {
+            style = buttonStyle(amber, "#111827", "#F59E0B")
+            setOnAction { importZipFile() }
+        }
+
+        val syncButton = Button("SYNC SERVER").apply {
+            style = buttonStyle(green, "#111827", "#10B981")
+            setOnAction { syncFromServer() }
+        }
+
+        val refreshButton = Button("REFRESH").apply {
+            style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+            setOnAction { refreshList(searchField.text.orEmpty()) }
+        }
+
+        val closeButton = Button("TUTUP").apply {
+            style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+            setOnAction { dialogStage.close() }
+        }
+
+        listView.selectionModel.selectedIndexProperty().addListener { _, _, newValue ->
+            val idx = newValue?.toInt() ?: -1
+            selectedProfile = cachedProfiles.getOrNull(idx)
+            detailLabel.text = selectedProfile?.let { buildWaveProfileDetail(it) } ?: "Pilih profil untuk melihat detail"
+        }
+
+        searchField.textProperty().addListener { _, _, newValue ->
+            refreshList(newValue.orEmpty())
+        }
+
+        val root = VBox(12.0).apply {
+            padding = Insets(14.0)
+            style = "-fx-background-color: #0D1423; -fx-border-color: #10B981; -fx-border-width: 1; -fx-background-radius: 18; -fx-border-radius: 18;"
+            children.addAll(
+                label("DATABASE WAVEID", green, 18.0, true),
+                searchField,
+                infoLabel,
+                listView,
+                card("DETAIL", VBox(6.0).apply {
+                    children.addAll(detailLabel)
+                }),
+                HBox(8.0).apply {
+                    children.addAll(
+                        backupButton,
+                        importButton,
+                        syncButton,
+                        refreshButton,
+                        editButton,
+                        deleteButton,
+                        Region().apply { HBox.setHgrow(this, Priority.ALWAYS) },
+                        closeButton
+                    )
+                }
+            )
+        }
+
+        dialogStage.scene = Scene(root)
+        dialogStage.show()
+        refreshList()
+    }
+
+    private fun buildWaveProfileDetail(profile: ProfilArus): String {
+        val tanggal = try {
+            if (profile.tanggal > 0L) {
+                java.time.Instant.ofEpochMilli(profile.tanggal)
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toLocalDateTime()
+                    .format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm"))
+            } else {
+                "N/A"
+            }
+        } catch (_: Exception) {
+            "N/A"
+        }
+        return buildString {
+            appendLine("ID: ${profile.id}")
+            appendLine("Brand: ${profile.brand}")
+            appendLine("Model: ${profile.model}")
+            appendLine("Kondisi: ${profile.kondisi}")
+            appendLine("Mode: ${profile.modeRekam}")
+            appendLine("User: ${profile.username}")
+            appendLine("Tanggal: $tanggal")
+            appendLine("Peak Arus: ${formatNumber(profile.puncakArus.toDouble(), 3)} A")
+            appendLine("Rata Arus: ${formatNumber(profile.rataArus.toDouble(), 3)} A")
+            appendLine("Min Arus: ${formatNumber(profile.minArus.toDouble(), 3)} A")
+            appendLine("Peak Daya: ${formatNumber(profile.puncakDaya.toDouble(), 3)} W")
+            appendLine("Konektor: ${profile.namaKonektor.ifBlank { "-" }}")
+        }
+    }
+
+    private fun showWaveComparisonDialog(mode: String, profiles: List<ProfilArus> = emptyList()) {
+        val dialogStage = Stage()
+        dialogStage.initOwner(primaryStage)
+        dialogStage.initStyle(StageStyle.UNDECORATED)
+        dialogStage.title = "Bandingkan Wave"
+
+        val activeProfiles = if (profiles.isNotEmpty()) profiles else waveIdManager.getProfilesByMode(mode)
+        if (activeProfiles.size < 2) {
+            notification.showError("Butuh minimal 2 profil untuk compare mode $mode")
+            return
+        }
+
+        fun profileLabel(profile: ProfilArus): String {
+            val tanggal = try {
+                if (profile.tanggal > 0L) {
+                    java.time.Instant.ofEpochMilli(profile.tanggal)
+                        .atZone(java.time.ZoneId.systemDefault())
+                        .toLocalDate()
+                        .toString()
+                } else {
+                    "N/A"
+                }
+            } catch (_: Exception) {
+                "N/A"
+            }
+            return "${profile.brand} ${profile.model} | ${profile.kondisi} | $tanggal"
+        }
+
+        val profileItems = FXCollections.observableArrayList(activeProfiles)
+        val profileConverter = object : StringConverter<ProfilArus>() {
+            override fun toString(profile: ProfilArus?): String = profile?.let { profileLabel(it) }.orEmpty()
+            override fun fromString(string: String?): ProfilArus? = null
+        }
+
+        val profileACombo = ComboBox(profileItems).apply {
+            converter = profileConverter
+            style = comboStyle()
+            prefWidth = 420.0
+            value = activeProfiles.firstOrNull()
+        }
+        val profileBCombo = ComboBox(profileItems).apply {
+            converter = profileConverter
+            style = comboStyle()
+            prefWidth = 420.0
+            value = activeProfiles.getOrNull(1) ?: activeProfiles.firstOrNull()
+        }
+
+        val modeLabel = label("Mode: $mode", textSecondary, 11.0, true)
+        val infoLabel = label("Pilih dua profil dari mode yang sama seperti di APK.", textSecondary, 11.0, false)
+        val btnCompare = Button("BANDINGKAN").apply {
+            style = buttonStyle(green, "#111827", "#10B981")
+            isDisable = true
+        }
+        val btnCancel = Button("BATAL").apply {
+            style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+            setOnAction { dialogStage.close() }
+        }
+
+        fun updateCompareState() {
+            val a = profileACombo.value
+            val b = profileBCombo.value
+            btnCompare.isDisable = a == null || b == null || a.id == b.id
+            infoLabel.text = when {
+                a == null || b == null -> "Pilih dua profil dari mode yang sama seperti di APK."
+                a.id == b.id -> "Profil A dan B harus berbeda."
+                else -> "Siap membandingkan ${a.brand} ${a.model} vs ${b.brand} ${b.model}."
+            }
+        }
+
+        profileACombo.valueProperty().addListener { _, _, _ -> updateCompareState() }
+        profileBCombo.valueProperty().addListener { _, _, _ -> updateCompareState() }
+
+        btnCompare.setOnAction {
+            val profileA = profileACombo.value
+            val profileB = profileBCombo.value
+            if (profileA == null || profileB == null || profileA.id == profileB.id) {
+                notification.showError("Pilih dua profil yang berbeda")
+                return@setOnAction
+            }
+
+            val waveA = profileA.getWaveformArray()
+            val waveB = profileB.getWaveformArray()
+            if (waveA.isEmpty() || waveB.isEmpty()) {
+                notification.showError("Data waveform tidak lengkap")
+                return@setOnAction
+            }
+
+            val score = waveSimilarity(
+                waveA.map { it.toDouble() },
+                waveB.map { it.toDouble() }
+            )
+
+            val (labelText, colorText) = when {
+                score >= 90.0 -> "Sangat Mirip" to red
+                score >= 80.0 -> "Kemungkinan Sama" to amber
+                score >= 70.0 -> "Ada Kemiripan" to cyan
+                else -> "Berbeda" to textSecondary
+            }
+
+            val diffPeak = kotlin.math.abs(profileA.puncakArus - profileB.puncakArus)
+            val resultLines = buildList {
+                add("WAVEID COMPARISON RESULT")
+                add("Mode: $mode")
+                add("A: ${profileA.brand} ${profileA.model}")
+                add("B: ${profileB.brand} ${profileB.model}")
+                add("")
+                add("Skor: ${formatNumber(score, 0)}%")
+                add("Label: $labelText")
+                add("Peak A: ${formatNumber(profileA.puncakArus.toDouble(), 3)}A")
+                add("Peak B: ${formatNumber(profileB.puncakArus.toDouble(), 3)}A")
+                add("Selisih Peak: ${formatNumber(diffPeak.toDouble(), 3)}A")
+            }
+
+            waveHistoryList.items.setAll(resultLines)
+            notification.showSuccess("Bandingkan selesai: ${formatNumber(score, 0)}%")
+
+            val resultStage = Stage()
+            resultStage.initOwner(dialogStage)
+            resultStage.initStyle(StageStyle.UNDECORATED)
+            resultStage.title = "Hasil Bandingkan"
+
+            val summaryText = TextArea(resultLines.joinToString("\n")).apply {
+                isEditable = false
+                isWrapText = true
+                prefRowCount = 10
+                style = terminalStyle()
+            }
+
+            val closeButton = Button("TUTUP").apply {
+                style = buttonStyle(colorText, "#111827", colorText.toHex())
+                setOnAction { resultStage.close() }
+            }
+
+            val root = VBox(12.0).apply {
+                padding = Insets(14.0)
+                style = "-fx-background-color: #0D1423; -fx-border-color: #2DD4BF; -fx-border-width: 1; -fx-background-radius: 18; -fx-border-radius: 18;"
+                children.addAll(
+                    label("BANDINGKAN WAVE", green, 18.0, true),
+                    modeLabel,
+                    summaryText,
+                    HBox(8.0).apply {
+                        children.addAll(Region().apply { HBox.setHgrow(this, Priority.ALWAYS) }, closeButton)
+                    }
+                )
+            }
+
+            dialogStage.close()
+            resultStage.scene = Scene(root)
+            resultStage.show()
+        }
+
+        val root = VBox(12.0).apply {
+            padding = Insets(14.0)
+            style = "-fx-background-color: #0D1423; -fx-border-color: #6D28D9; -fx-border-width: 1; -fx-background-radius: 18; -fx-border-radius: 18;"
+            children.addAll(
+                label("BANDINGKAN WAVE", purple, 18.0, true),
+                modeLabel,
+                infoLabel,
+                label("Profil A", textSecondary, 11.0, true),
+                profileACombo,
+                label("Profil B", textSecondary, 11.0, true),
+                profileBCombo,
+                HBox(10.0).apply {
+                    children.addAll(
+                        btnCancel,
+                        Region().apply { HBox.setHgrow(this, Priority.ALWAYS) },
+                        btnCompare
+                    )
+                }
+            )
+        }
+
+        dialogStage.scene = Scene(root)
+        dialogStage.show()
+        updateCompareState()
+    }
+
+    private fun showWaveResultDialog(
+        queryProfile: ProfilArus,
+        bestMatches: List<com.rphone.v3.desktop.engine.DtwMatcher.MatchResult>,
+        diagnosis: String
+    ) {
+        val dialogStage = Stage()
+        dialogStage.initOwner(primaryStage)
+        dialogStage.initStyle(StageStyle.UNDECORATED)
+        dialogStage.title = "Hasil Analisa"
+
+        val titleLabel = label("${queryProfile.brand} ${queryProfile.model}".trim(), textPrimary, 20.0, true)
+        val subtitleLabel = label("Klik SIMPAN untuk menambahkan ke database", textSecondary, 11.0, false)
+
+        val peakLabel = metricValue(formatNumber(queryProfile.puncakArus.toDouble(), 3), red)
+        val avgLabel = metricValue(formatNumber(queryProfile.rataArus.toDouble(), 3), purple)
+        val durLabel = metricValue(formatNumber(queryProfile.durasiMs / 1000.0, 1), cyan)
+
+        val diagnosisText = TextArea(diagnosis).apply {
+            isWrapText = true
+            isEditable = false
+            prefRowCount = 7
+            style = terminalStyle()
+        }
+
+        val saveButton = Button("SIMPAN DATA").apply {
+            style = buttonStyle(green, "#111827", "#10B981")
+            setOnAction {
+                dialogStage.close()
+                showWaveSaveDialog(queryProfile, bestMatches)
+            }
+        }
+
+        val aiButton = Button("ANALISA AI").apply {
+            style = buttonStyle(purple, "#111827", "#A78BFA")
+            setOnAction {
+                dialogStage.close()
+                runWaveAiAnalysis(queryProfile, bestMatches, diagnosis)
+            }
+        }
+
+        val closeButton = Button("TUTUP").apply {
+            style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+            setOnAction { dialogStage.close() }
+        }
+
+        val root = VBox(12.0).apply {
+            padding = Insets(14.0)
+            style = "-fx-background-color: #0D1423; -fx-border-color: #2DD4BF; -fx-border-width: 1; -fx-background-radius: 18; -fx-border-radius: 18;"
+            children.addAll(
+                titleLabel,
+                subtitleLabel,
+                GridPane().apply {
+                    hgap = 10.0
+                    vgap = 10.0
+                    add(metricCard("PUNCAK", peakLabel, "A"), 0, 0)
+                    add(metricCard("RATA", avgLabel, "A"), 1, 0)
+                    add(metricCard("DURASI", durLabel, "s"), 2, 0)
+                },
+                card("DIAGNOSIS", VBox(8.0).apply {
+                    children.addAll(
+                        diagnosisText,
+                        HBox(8.0).apply {
+                            children.addAll(
+                                Region().apply { HBox.setHgrow(this, Priority.ALWAYS) },
+                                saveButton,
+                                aiButton,
+                                closeButton
+                            )
+                        }
+                    )
+                })
+            )
+        }
+
+        dialogStage.scene = Scene(root)
+        dialogStage.show()
+    }
+
+    private fun showWaveSaveDialog(
+        queryProfile: ProfilArus,
+        bestMatches: List<com.rphone.v3.desktop.engine.DtwMatcher.MatchResult>
+    ) {
+        val dialogStage = Stage()
+        dialogStage.initOwner(primaryStage)
+        dialogStage.initStyle(StageStyle.UNDECORATED)
+        dialogStage.title = "Simpan Rekaman"
+
+        val commonBrands = listOf(
+            "MEDIATEK", "QUALCOMM", "SAMSUNG", "EXYNOS",
+            "UNISOC", "SPREADTRUM", "HISILICON", "KIRIN",
+            "APPLE", "NVIDIA", "MARVELL", "INTEL"
+        )
+        val dbBrands = try { waveIdManager.getDistinctBrands(queryProfile.modeRekam) } catch (_: Exception) { emptyList() }
+        val brandChoices = (commonBrands + dbBrands).distinct()
+        val brandCombo = ComboBox(FXCollections.observableArrayList(brandChoices)).apply {
+            promptText = "Pilih Brand"
+            style = comboStyle()
+            prefWidth = 340.0
+        }
+        val modelField = TextField().apply {
+            promptText = "Tipe Chipset (misal: MT6765, QC3.0)"
+            style = controlStyle()
+        }
+        val kondisiField = TextField().apply {
+            promptText = "Kondisi (Bootloop, Normal...)"
+            style = controlStyle()
+        }
+        val usernameField = TextField().apply {
+            promptText = "Nama teknisi"
+            style = controlStyle()
+            text = settingsUsernameField.text.ifBlank { "Teknisi" }
+        }
+        val infoLabel = label("Lengkapi semua field untuk menyimpan ke database", textSecondary, 11.0, false)
+
+        val btnSave = Button("SIMPAN").apply {
+            style = buttonStyle(green, "#111827", "#10B981")
+            isDisable = true
+        }
+        val btnCancel = Button("BATAL").apply {
+            style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+            setOnAction { dialogStage.close() }
+        }
+
+        fun refreshSaveState() {
+            val brandOk = !brandCombo.value.isNullOrBlank()
+            val modelOk = modelField.text.isNullOrBlank().not()
+            val kondisiOk = kondisiField.text.isNullOrBlank().not()
+            val userOk = usernameField.text.isNullOrBlank().not()
+            btnSave.isDisable = !(brandOk && modelOk && kondisiOk && userOk)
+        }
+
+        btnSave.setOnAction {
+            val brand = brandCombo.value.orEmpty()
+            val model = modelField.text.trim()
+            val kondisi = kondisiField.text.trim()
+            val username = usernameField.text.trim().ifBlank { "Teknisi" }
+            val sourceProfile = queryProfile.copy(
+                id = 0,
+                brand = brand,
+                model = model,
+                kondisi = kondisi,
+                username = username,
+                tanggal = System.currentTimeMillis()
+            )
+            dialogStage.close()
+            scope.launch {
+                try {
+                    val insertedId = waveIdManager.saveProfile(sourceProfile)
+                    if (insertedId > 0) {
+                        withContext(Dispatchers.Main) {
+                            notification.showSuccess("Rekaman tersimpan ke database")
+                            refreshWaveHistory()
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            notification.showError("Gagal menyimpan rekaman")
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        notification.showError("Gagal menyimpan rekaman: ${e.message}")
+                    }
+                }
+            }
+        }
+
+        listOf(brandCombo, modelField, kondisiField, usernameField).forEach { control ->
+            when (control) {
+                is ComboBox<*> -> control.valueProperty().addListener { _, _, _ -> refreshSaveState() }
+                is TextField -> control.textProperty().addListener { _, _, _ -> refreshSaveState() }
+            }
+        }
+
+        val root = VBox(12.0).apply {
+            padding = Insets(14.0)
+            style = "-fx-background-color: #0D1423; -fx-border-color: #6D28D9; -fx-border-width: 1; -fx-background-radius: 18; -fx-border-radius: 18;"
+            children.addAll(
+                label("SIMPAN REKAMAN", purple, 18.0, true),
+                brandCombo,
+                modelField,
+                kondisiField,
+                usernameField,
+                infoLabel,
+                HBox(10.0).apply {
+                    children.addAll(
+                        btnCancel,
+                        Region().apply { HBox.setHgrow(this, Priority.ALWAYS) },
+                        btnSave
+                    )
+                }
+            )
+        }
+
+        refreshSaveState()
+        dialogStage.scene = Scene(root)
+        dialogStage.show()
+    }
+
+    private fun runWaveAiAnalysis(
+        queryProfile: ProfilArus,
+        bestMatches: List<com.rphone.v3.desktop.engine.DtwMatcher.MatchResult>,
+        diagnosis: String
+    ) {
+        scope.launch {
+            val cfg = com.rphone.v3.desktop.ai.AiConfigStore.load()
+            if (cfg.apiKey.isBlank()) {
+                withContext(Dispatchers.Main) {
+                    notification.showMessage("Isi API key AI di Settings dulu")
+                }
+                return@launch
+            }
+
+            val top = bestMatches.firstOrNull()
+            val waveValues = queryProfile.getWaveformArray().map { it.toFloat() }
+            val analysis = com.rphone.v3.desktop.ai.WaveAnalyzer.analisa(waveValues)
+            val promptPair = if (queryProfile.modeRekam.equals("PSU", ignoreCase = true)) {
+                com.rphone.v3.desktop.ai.AiPromptBuilder.buildPsu(
+                    refBrand = top?.brand.orEmpty(),
+                    refModel = top?.model.orEmpty(),
+                    refKondisi = top?.kondisi.orEmpty(),
+                    refSkor = top?.similarity?.toFloat() ?: 0f,
+                    peakArus = queryProfile.puncakArus,
+                    avgArus = queryProfile.rataArus,
+                    minArus = queryProfile.minArus,
+                    durasiMs = queryProfile.durasiMs,
+                    chipsetDiketahui = top != null,
+                    waveAnalysis = analysis,
+                    keluhanUser = queryProfile.namaKonektor,
+                    preAnalisaJson = queryProfile.faseJson
+                )
+            } else {
+                com.rphone.v3.desktop.ai.AiPromptBuilder.buildUsb(
+                    refBrand = top?.brand.orEmpty(),
+                    refModel = top?.model.orEmpty(),
+                    refKondisi = top?.kondisi.orEmpty(),
+                    refSkor = top?.similarity?.toFloat() ?: 0f,
+                    peakArus = queryProfile.puncakArus,
+                    avgArus = queryProfile.rataArus,
+                    minArus = queryProfile.minArus,
+                    durasiMs = queryProfile.durasiMs,
+                    chipsetDiketahui = top != null,
+                    waveAnalysis = analysis,
+                    voltAvg = queryProfile.avgVolt,
+                    dpAvg = queryProfile.dpAvg,
+                    dmAvg = queryProfile.dmAvg,
+                    isFastCharge = false,
+                    fastChargeType = ""
+                )
+            }
+
+            val provider = cfg.provider.lowercase()
+            val result = when (provider) {
+                "claude" -> com.rphone.v3.desktop.ai.ClaudeAnalyzer.analisa(promptPair.asPrompt)
+                "groq" -> com.rphone.v3.desktop.ai.GroqAnalyzer.analisa(promptPair.asPrompt)
+                "gemini" -> com.rphone.v3.desktop.ai.GroqAnalyzer.analisa(promptPair.asPrompt)
+                else -> com.rphone.v3.desktop.ai.LiteLLMAnalyzer.analisa(promptPair.system, promptPair.user)
+            }
+
+            withContext(Dispatchers.Main) {
+                result.onSuccess { aiText ->
+                    val aiStage = Stage()
+                    aiStage.initOwner(primaryStage)
+                    aiStage.initStyle(StageStyle.UNDECORATED)
+                    aiStage.title = "Analisa AI"
+
+                    val textArea = TextArea(aiText).apply {
+                        isWrapText = true
+                        isEditable = false
+                        prefRowCount = 12
+                        style = terminalStyle()
+                    }
+
+                    val root = VBox(12.0).apply {
+                        padding = Insets(14.0)
+                        style = "-fx-background-color: #0D1423; -fx-border-color: #A78BFA; -fx-border-width: 1; -fx-background-radius: 18; -fx-border-radius: 18;"
+                        children.addAll(
+                            label("ANALISA AI", purple, 18.0, true),
+                            textArea,
+                            HBox(8.0).apply {
+                                children.addAll(
+                                    Region().apply { HBox.setHgrow(this, Priority.ALWAYS) },
+                                    Button("TUTUP").apply {
+                                        style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+                                        setOnAction { aiStage.close() }
+                                    }
+                                )
+                            }
+                        )
+                    }
+
+                    aiStage.scene = Scene(root)
+                    aiStage.show()
+                }.onFailure { err ->
+                    notification.showError("Analisa AI gagal: ${err.message}")
+                }
             }
         }
     }
