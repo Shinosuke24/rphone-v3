@@ -793,7 +793,6 @@ class RPhoneDesktopApp : Application() {
             maxWidth = 420.0
             children.addAll(
                 connectionCard("USB MODE", cyan),
-                card("USB Metrics", metrics),
                 actionPanel,
                 usbAnalysisStatus,
                 usbAnalysisProgress
