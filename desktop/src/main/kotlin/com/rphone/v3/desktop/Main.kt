@@ -721,6 +721,24 @@ class RPhoneDesktopApp : Application() {
             maxWidth = Double.MAX_VALUE
             children.addAll(
                 connectionCard("USB MODE", cyan),
+                // Add WaveID submenu tiles here to mirror APK inside USB page
+                card("WAVEID", VBox(6.0).apply {
+                    children.addAll(
+                        label("WAVEID", green, 14.0, true),
+                        HBox(8.0).apply {
+                            children.addAll(
+                                waveTile("🗂", "Rekam Baru", "Rekam arus boot HP") { sendCommand("BUZZ_REKAM_BARU"); recordWaveProfile() },
+                                waveTile("📁", "Database", "Lihat profil tersimpan") { sendCommand("BUZZ_BUKA_DB"); showWaveDatabaseDialog() }
+                            )
+                        },
+                        HBox(8.0).apply {
+                            children.addAll(
+                                waveTile("◫", "Bandingkan", "Overlay 2 waveform") { sendCommand("BUZZ_BANDINGKAN"); compareLatestWaveProfiles() },
+                                waveTile("📥", "Import .rphp", "Tambah dari komunitas") { sendCommand("BUZZ_IMPORT"); importWaveLog() }
+                            )
+                        }
+                    )
+                }),
                 card("USB Metrics", metrics),
                 actionPanel,
                 usbAnalysisStatus,
