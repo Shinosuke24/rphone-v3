@@ -662,21 +662,18 @@ class RPhoneDesktopApp : Application() {
         usbChartCanvas.heightProperty().addListener { _, _, _ -> drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan, usbWaveState) }
 
         val header = pageHeader("USB MODE", cyan, "SET_MODE_USB")
-        val metrics = GridPane().apply {
-            hgap = 8.0
-            vgap = 8.0
-            // prefer slightly wider first column so numeric values have room
-            columnConstraints.add(ColumnConstraints().apply { percentWidth = 60.0; hgrow = Priority.ALWAYS })
-            columnConstraints.add(ColumnConstraints().apply { percentWidth = 40.0; hgrow = Priority.ALWAYS })
-            add(metricCard("ARUS", usbMetricCurrent, "A"), 0, 0)
-            add(metricCard("TEGANGAN", usbMetricVoltage, "V"), 1, 0)
-            add(metricCard("DAYA", usbMetricPower, "W"), 0, 1)
-            add(metricCard("KAPASITAS", usbMetricCapacity, "mAh"), 1, 1)
-            add(metricCard("PROTOKOL", usbMetricCharge, ""), 0, 2)
-            add(metricCard("OCP", usbMetricOcp, ""), 1, 2)
-            add(metricCard("D+", usbMetricDp, "V"), 0, 3)
-            add(metricCard("D-", usbMetricDm, "V"), 1, 3)
-        }
+        val metrics = metricsPanel(
+            listOf(
+                Triple("ARUS", usbMetricCurrent, "A"),
+                Triple("TEGANGAN", usbMetricVoltage, "V"),
+                Triple("DAYA", usbMetricPower, "W"),
+                Triple("KAPASITAS", usbMetricCapacity, "mAh"),
+                Triple("PROTOKOL", usbMetricCharge, ""),
+                Triple("OCP", usbMetricOcp, ""),
+                Triple("D+", usbMetricDp, "V"),
+                Triple("D-", usbMetricDm, "V")
+            )
+        )
 
         val tabs = waveTabRow(usbWaveState, cyan, usbChartCanvas)
         val chartCard = card("WAVEFORM", VBox(8.0).apply {
@@ -689,18 +686,19 @@ class RPhoneDesktopApp : Application() {
 
         val actionPanel = card("Quick Action", VBox(8.0).apply {
             children.addAll(
-                primaryActionButton("MULAI ANALISA", cyan) {
-                    showChipsetFilterAndStartAnalysis("USB")
-                },
-                secondaryActionButton("STOP ANALISA", red) {
-                    stopAnalysis()
-                },
-                secondaryActionButton("RESET DATA", purple) {
-                    sendCommands("BUZZ_RESET_WAVE")
-                    usbWaveState.reset()
-                    drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan, usbWaveState)
-                },
-                label("USB analysis shell follows the APK workflow.", textSecondary, 10.0, false)
+                actionButtonsRow(
+                    primaryActionButton("MULAI ANALISA", cyan) { showChipsetFilterAndStartAnalysis("USB") },
+                    secondaryActionButton("STOP ANALISA", red) { stopAnalysis() },
+                    secondaryActionButton("LIHAT DETAIL ↗", textPrimary) { notification.showMessage("Detail view diwakili oleh shell EXE") }
+                ),
+                actionButtonsRow(
+                    secondaryActionButton("RESET DATA", purple) {
+                        sendCommands("BUZZ_RESET_WAVE")
+                        usbWaveState.reset()
+                        drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan, usbWaveState)
+                    }
+                ),
+                label("Live USB analysis and waveform mengikuti alur utama EXE.", textSecondary, 10.0, false)
             )
         })
 
@@ -716,29 +714,11 @@ class RPhoneDesktopApp : Application() {
         }
 
         val leftColumn = VBox(10.0).apply {
-            prefWidth = 430.0
-            minWidth = 260.0
-            maxWidth = Double.MAX_VALUE
+            prefWidth = 380.0
+            minWidth = 340.0
+            maxWidth = 420.0
             children.addAll(
                 connectionCard("USB MODE", cyan),
-                // Add WaveID submenu tiles here to mirror APK inside USB page
-                card("WAVEID", VBox(6.0).apply {
-                    children.addAll(
-                        label("WAVEID", green, 14.0, true),
-                        HBox(8.0).apply {
-                            children.addAll(
-                                waveTile("🗂", "Rekam Baru", "Rekam arus boot HP") { sendCommand("BUZZ_REKAM_BARU"); recordWaveProfile() },
-                                waveTile("📁", "Database", "Lihat profil tersimpan") { sendCommand("BUZZ_BUKA_DB"); showWaveDatabaseDialog() }
-                            )
-                        },
-                        HBox(8.0).apply {
-                            children.addAll(
-                                waveTile("◫", "Bandingkan", "Overlay 2 waveform") { sendCommand("BUZZ_BANDINGKAN"); compareLatestWaveProfiles() },
-                                waveTile("📥", "Import .rphp", "Tambah dari komunitas") { sendCommand("BUZZ_IMPORT"); importWaveLog() }
-                            )
-                        }
-                    )
-                }),
                 card("USB Metrics", metrics),
                 actionPanel,
                 usbAnalysisStatus,
@@ -746,7 +726,7 @@ class RPhoneDesktopApp : Application() {
             )
         }
 
-        val topSplit = HBox(10.0).apply {
+        val topSplit = HBox(12.0).apply {
             alignment = Pos.TOP_CENTER
             children.addAll(leftColumn, chartCard)
         }
