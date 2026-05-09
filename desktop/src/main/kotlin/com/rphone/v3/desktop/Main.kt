@@ -182,6 +182,10 @@ class RPhoneDesktopApp : Application() {
     private val waveIndexFileName = "wave_profiles_index.json"
     private val usbWaveState = DesktopWaveformState()
     private val psuWaveState = DesktopWaveformState()
+    @Volatile private var waveProfilesReady = false
+    @Volatile private var waveProfilesLoading = false
+    @Volatile private var cachedUsbProfiles = 0
+    @Volatile private var cachedPsuProfiles = 0
     
     // Probe stabilization buffers and state
     private val probeVoltBuffer = ArrayDeque<Double>()
@@ -454,15 +458,12 @@ class RPhoneDesktopApp : Application() {
 
         refreshDevices()
         selectPage(DesktopPage.USB)
-        // Import local .rphp files into DB (if any), then load WaveID DB entries on startup
+        // Import local .rphp files into DB (if any), then warm profile cache on startup.
         scope.launch {
             try {
-                val (found, imported, dbCount) = importLocalRphpFilesToDb()
-                println("Startup Wave import: found=$found, imported=$imported, dbCount=$dbCount")
-                loadWaveFiles()
-                println("WaveDB loaded on startup (count=$dbCount)")
+                rebuildWaveProfilesCache("startup")
             } catch (e: Exception) {
-                println("Failed to load/import WaveDB on startup: ${e.message}")
+                logDebug("STARTUP", "Failed to load/import WaveDB on startup: ${e.message}")
             }
         }
         startClock()
@@ -792,7 +793,7 @@ class RPhoneDesktopApp : Application() {
             minWidth = 340.0
             maxWidth = 420.0
             children.addAll(
-                connectionCard("USB MODE", cyan),
+                card("USB Metrics", metrics),
                 actionPanel,
                 usbAnalysisStatus,
                 usbAnalysisProgress
@@ -1727,9 +1728,6 @@ class RPhoneDesktopApp : Application() {
             dialog.contentText = "Brand:"
             val result = dialog.showAndWait()
             result.ifPresent { selected ->
-                scope.launch {
-                    val sjson = '{'.toString() // no-op placeholder; real persistence optional
-                }
                 usbAnalysisStatus.text = "Sedang analisa... ($selected)"
                 usbAnalysisStatus.isVisible = true
                 usbAnalysisStatus.isManaged = true
@@ -1871,31 +1869,42 @@ class RPhoneDesktopApp : Application() {
             dialogStage.title = "Mulai Analisa USB"
 
             val brands: List<String> = try { waveIdManager.getDistinctBrands("USB") } catch (_: Exception) { emptyList() }
-            val brandChoices: List<String> = if (brands.isEmpty()) listOf("Generic") else (listOf("Generic") + brands.distinct())
+            val brandChoices: List<String> = if (brands.isEmpty()) listOf("— Pilih Brand —") else (listOf("— Pilih Brand —") + brands.distinct())
             val brandCombo = javafx.scene.control.ComboBox(FXCollections.observableArrayList(brandChoices)).apply {
                 value = brandChoices.first()
                 style = comboStyle()
                 prefWidth = 260.0
             }
-            val modelCombo = javafx.scene.control.ComboBox<String>(FXCollections.observableArrayList()).apply {
-                promptText = "Pilih model (opsional)"
+            val modelCombo = javafx.scene.control.ComboBox<String>(FXCollections.observableArrayList("— Auto —")).apply {
+                value = "— Auto —"
                 style = comboStyle()
                 isDisable = true
                 prefWidth = 260.0
             }
 
-            val infoLabel = label("Pilih brand dan model (opsional).", textSecondary, 11.0, false)
+            val infoLabel = label("Pilih brand & model terlebih dahulu", textSecondary, 11.0, false)
 
             fun refreshModelsForBrand(b: String) {
-                val models = waveIdManager.getProfilesByMode("USB").filter { it.brand.equals(b, true) }.map { it.model }.distinct()
+                if (b == "— Pilih Brand —" || b.isBlank()) {
+                    modelCombo.items.setAll("— Auto —")
+                    modelCombo.value = "— Auto —"
+                    modelCombo.isDisable = true
+                    infoLabel.text = "Pilih brand & model terlebih dahulu"
+                    return
+                }
+                val profiles = waveIdManager.getProfilesByMode("USB")
+                val models = profiles.filter { it.brand.equals(b, true) }.map { it.model }.distinct()
                 if (models.isNotEmpty()) {
-                    modelCombo.items.setAll(models)
+                    modelCombo.items.setAll(listOf("— Auto —") + models)
+                    modelCombo.value = "— Auto —"
                     modelCombo.isDisable = false
                 } else {
-                    modelCombo.items.clear()
+                    modelCombo.items.setAll("— Auto —")
+                    modelCombo.value = "— Auto —"
                     modelCombo.isDisable = true
                 }
-                infoLabel.text = "${waveIdManager.getProfilesByMode("USB").count { it.brand.equals(b, true) }} profil tersedia"
+                val count = profiles.count { it.brand.equals(b, true) }
+                infoLabel.text = "✓ $count profil tersedia untuk $b"
             }
 
             brandCombo.valueProperty().addListener { _, _, newV -> refreshModelsForBrand(newV ?: "") }
@@ -1903,44 +1912,68 @@ class RPhoneDesktopApp : Application() {
 
             val btnStart = Button("MULAI ANALISA").apply {
                 style = buttonStyle(cyan, "#111827", "#00D4FF")
-                isDisable = false
+                isDisable = true
                 setOnAction {
-                    val selectedBrand = brandCombo.value ?: "Generic"
-                    val selectedModel = modelCombo.value ?: ""
-                    val startIndex = usbWaveState.currentBuf.size
-
-                    fun startAnalysis() {
-                        dialogStage.close()
-                        usbAnalysisStatus.text = "Menunggu arus... ($selectedBrand ${if (selectedModel.isNotBlank()) selectedModel else "*"})"
-                        usbAnalysisStatus.isVisible = true
-                        usbAnalysisStatus.isManaged = true
-                        usbAnalysisProgress.progress = ProgressBar.INDETERMINATE_PROGRESS
-                        usbAnalysisProgress.isVisible = true
-                        usbAnalysisProgress.isManaged = true
-                        sendCommands("SET_MODE_USB", "BUZZ_MULAI_ANALISA")
-                        scope.launch { performUsbAnalysisWithDetection(selectedBrand, selectedModel, startIndex) }
-                    }
-
-                    if (!serial.isConnected()) {
-                        val preferred = deviceCombo.value
-                        if (preferred != null) {
-                            notification.showMessage("Menyambungkan ke ${preferred.name}...")
-                            scope.launch {
-                                connectTo(preferred)
-                                kotlinx.coroutines.delay(300L)
-                                withContext(Dispatchers.Main) {
-                                    if (serial.isConnected()) startAnalysis() else notification.showError("Tidak terhubung ke device. Sambungkan device sebelum analisa.")
-                                }
-                            }
-                        } else {
-                            notification.showError("Tidak terhubung ke device. Sambungkan device sebelum analisa.")
-                        }
+                    val selectedBrandRaw = brandCombo.value ?: ""
+                    if (selectedBrandRaw == "— Pilih Brand —" || selectedBrandRaw.isBlank()) {
+                        notification.showError("Pilih brand chipset terlebih dahulu")
                         return@setOnAction
                     }
+                    val selectedBrand = selectedBrandRaw
+                    val selectedModel = modelCombo.value?.takeIf { it != "— Auto —" } ?: ""
+                    val startIndex = usbWaveState.currentBuf.size
 
-                    startAnalysis()
+                    scope.launch {
+                        val ready = ensureWaveProfilesReady("usb-analysis-dialog")
+                        withContext(Dispatchers.Main) {
+                            if (!ready) {
+                                notification.showError("Database profile belum siap. Coba Rebuild DB lalu ulangi analisa.")
+                                return@withContext
+                            }
+
+                            fun startAnalysis() {
+                                dialogStage.close()
+                                logDebug("ANALYSIS_USB", "start brand=$selectedBrand model=${if (selectedModel.isBlank()) "AUTO" else selectedModel} startIndex=$startIndex usbCandidates=$cachedUsbProfiles")
+                                usbAnalysisStatus.text = "Menunggu arus... ($selectedBrand ${if (selectedModel.isNotBlank()) selectedModel else "*"})"
+                                usbAnalysisStatus.isVisible = true
+                                usbAnalysisStatus.isManaged = true
+                                usbAnalysisProgress.progress = ProgressBar.INDETERMINATE_PROGRESS
+                                usbAnalysisProgress.isVisible = true
+                                usbAnalysisProgress.isManaged = true
+                                sendCommands("SET_MODE_USB", "BUZZ_MULAI_ANALISA")
+                                scope.launch { performUsbAnalysisWithDetection(selectedBrand, selectedModel, startIndex) }
+                            }
+
+                            if (!serial.isConnected()) {
+                                val preferred = deviceCombo.value
+                                if (preferred != null) {
+                                    notification.showMessage("Menyambungkan ke ${preferred.name}...")
+                                    scope.launch {
+                                        connectTo(preferred)
+                                        kotlinx.coroutines.delay(300L)
+                                        withContext(Dispatchers.Main) {
+                                            if (serial.isConnected()) startAnalysis() else notification.showError("Tidak terhubung ke device. Sambungkan device sebelum analisa.")
+                                        }
+                                    }
+                                } else {
+                                    notification.showError("Tidak terhubung ke device. Sambungkan device sebelum analisa.")
+                                }
+                                return@withContext
+                            }
+
+                            startAnalysis()
+                        }
+                    }
                 }
             }
+
+            fun updateStartState() {
+                val brandOk = brandCombo.value != null && brandCombo.value != "— Pilih Brand —"
+                btnStart.isDisable = !brandOk
+            }
+            brandCombo.valueProperty().addListener { _, _, _ -> updateStartState() }
+            modelCombo.valueProperty().addListener { _, _, _ -> updateStartState() }
+            updateStartState()
 
             val layout = VBox(12.0).apply {
                 padding = Insets(12.0)
@@ -1956,6 +1989,15 @@ class RPhoneDesktopApp : Application() {
     private suspend fun performUsbAnalysisWithDetection(brand: String, model: String, startIndex: Int = 0) {
         withContext(Dispatchers.IO) {
             try {
+                if (!ensureWaveProfilesReady("usb-analysis-run")) {
+                    withContext(Dispatchers.Main) {
+                        usbAnalysisStatus.text = "Database profile belum siap"
+                        usbAnalysisProgress.isVisible = false
+                        usbAnalysisProgress.isManaged = false
+                        notification.showError("Profile belum loaded. Coba Rebuild DB.")
+                    }
+                    return@withContext
+                }
                 // stage 1: wait for non-zero current (baseline)
                 val idleStart = System.currentTimeMillis()
                 var detected = false
@@ -1993,6 +2035,7 @@ class RPhoneDesktopApp : Application() {
                 // stage 3: run DTW against filtered DB
                 val profiles = waveIdManager.getProfilesByMode("USB")
                 val candidates = if (brand.equals("Generic", true)) profiles else profiles.filter { it.brand.equals(brand, true) && (model.isBlank() || it.model.equals(model, true)) }
+                logDebug("ANALYSIS_USB", "candidates total=${profiles.size} filtered=${candidates.size} brand=$brand model=${if (model.isBlank()) "AUTO" else model}")
                 if (candidates.isEmpty()) {
                     withContext(Dispatchers.Main) {
                         usbAnalysisStatus.text = "Tidak ada profil untuk filter"
@@ -2009,6 +2052,7 @@ class RPhoneDesktopApp : Application() {
                 val results = waveIdManager.compareWaveforms(samples.map { it.toDouble() }, queryPeak, queryAvg, candidates)
                 val threshold = dtwThresholdPercent.toDouble()
                 val matches = results.filter { it.similarity >= threshold }
+                logDebug("ANALYSIS_USB", "completed samples=${samples.size} results=${results.size} matches=${matches.size} threshold=$threshold")
                 withContext(Dispatchers.Main) {
                     val lines = if (matches.isNotEmpty()) {
                         buildList {
@@ -2030,6 +2074,7 @@ class RPhoneDesktopApp : Application() {
                     notification.showSuccess("Analisa USB selesai")
                 }
             } catch (e: Exception) {
+                logDebug("ANALYSIS_USB", "failed: ${e.message}")
                 withContext(Dispatchers.Main) {
                     usbAnalysisStatus.text = "Error: ${e.message}"
                     usbAnalysisProgress.isVisible = false
@@ -2043,6 +2088,15 @@ class RPhoneDesktopApp : Application() {
     private suspend fun performPsuAnalysisWithDetection(brand: String, model: String = "", startIndex: Int = 0) {
         withContext(Dispatchers.IO) {
             try {
+                if (!ensureWaveProfilesReady("psu-analysis-run")) {
+                    withContext(Dispatchers.Main) {
+                        usbAnalysisStatus.text = "Database profile belum siap"
+                        usbAnalysisProgress.isVisible = false
+                        usbAnalysisProgress.isManaged = false
+                        notification.showError("Profile belum loaded. Coba Rebuild DB.")
+                    }
+                    return@withContext
+                }
                 // FASE 1: Pre-analisa 10 detik sampling
                 val preBuffer = mutableListOf<Double>()
                 val DURASI_PRE = 10_000L
@@ -2167,6 +2221,7 @@ class RPhoneDesktopApp : Application() {
                 // FASE 3: DTW matching
                 val profiles = waveIdManager.getProfilesByMode("PSU")
                 val candidates = if (brand.equals("Generic", ignoreCase = true)) profiles else profiles.filter { it.brand.equals(brand, ignoreCase = true) && (model.isBlank() || it.model.equals(model, true)) }
+                logDebug("ANALYSIS_PSU", "candidates total=${profiles.size} filtered=${candidates.size} brand=$brand model=${if (model.isBlank()) "AUTO" else model}")
                 if (candidates.isEmpty()) {
                     withContext(Dispatchers.Main) {
                         usbAnalysisStatus.text = "Tidak ada profil untuk filter"
@@ -2182,6 +2237,7 @@ class RPhoneDesktopApp : Application() {
                 val results = waveIdManager.compareWaveforms(samples.map { it.toDouble() }, queryPeak, queryAvg, candidates)
                 val threshold = dtwThresholdPercent.toDouble()
                 val matches = results.filter { it.similarity >= threshold }
+                logDebug("ANALYSIS_PSU", "completed samples=${samples.size} results=${results.size} matches=${matches.size} threshold=$threshold")
 
                 withContext(Dispatchers.Main) {
                     val lines = if (matches.isNotEmpty()) {
@@ -2203,6 +2259,7 @@ class RPhoneDesktopApp : Application() {
                     notification.showSuccess("Analisa PSU selesai")
                 }
             } catch (e: Exception) {
+                logDebug("ANALYSIS_PSU", "failed: ${e.message}")
                 withContext(Dispatchers.Main) {
                     usbAnalysisStatus.text = "Error: ${e.message}"
                     usbAnalysisProgress.isVisible = false
@@ -2662,6 +2719,7 @@ class RPhoneDesktopApp : Application() {
         if (serial.isConnected()) {
             scope.launch {
                 serial.disconnect()
+                logDebug("USB_CONN", "disconnect requested")
                 withContext(Dispatchers.Main) {
                     updateConnectionState(false, null)
                 }
@@ -2673,6 +2731,7 @@ class RPhoneDesktopApp : Application() {
 
     private fun connectTo(device: SerialDevice) {
         scope.launch {
+            logDebug("USB_CONN", "connect requested: ${device.name} (${device.path})")
             val ok = serial.connect(device.path)
             withContext(Dispatchers.Main) {
                 if (ok) {
@@ -2686,6 +2745,7 @@ class RPhoneDesktopApp : Application() {
                         else -> sendCommand("SET_MODE_USB")
                     }
                 } else {
+                    logDebug("USB_CONN", "connect failed: ${device.name} (${device.path})")
                     notification.showError("Gagal connect ke ${device.name}")
                 }
             }
@@ -2696,6 +2756,7 @@ class RPhoneDesktopApp : Application() {
         connectionStatus.text = if (connected) "Connected" else "Disconnected"
         connectionStatus.style = statusStyle(if (connected) green else red)
         connectionDevice.text = device?.let { "${it.name} (${it.path})" } ?: "No device"
+        logDebug("USB_CONN", "state=${if (connected) "connected" else "disconnected"} device=${device?.path ?: "none"}")
     }
 
     private fun startReceiveLoop() {
@@ -3863,6 +3924,7 @@ class RPhoneDesktopApp : Application() {
     private fun syncWaveDatabase() {
         scope.launch {
             try {
+                logDebug("SYNC", "syncWaveDatabase started")
                 val listJson = SupabaseUploader.listObjects("WAVE")
                 if (listJson.isNullOrBlank()) {
                     withContext(Dispatchers.Main) {
@@ -3920,7 +3982,9 @@ class RPhoneDesktopApp : Application() {
                     if (imported > 0) notification.showSuccess("Synced $imported profiles from cloud") else notification.showMessage("No remote profiles found or sync failed")
                     refreshFileLists()
                 }
+                logDebug("SYNC", "syncWaveDatabase completed imported=$imported")
             } catch (e: Exception) {
+                logDebug("SYNC", "syncWaveDatabase failed: ${e.message}")
                 withContext(Dispatchers.Main) { notification.showError("Cloud sync failed: ${e.message}") }
             }
         }
@@ -4045,6 +4109,10 @@ class RPhoneDesktopApp : Application() {
                 waveDbCountLabel.text = filteredCount.toString()
                 settingsStatus.text = "Loaded $filteredCount wave profiles from database"
             }
+            cachedUsbProfiles = try { waveIdManager.getProfilesByMode("USB").size } catch (_: Exception) { 0 }
+            cachedPsuProfiles = try { waveIdManager.getProfilesByMode("PSU").size } catch (_: Exception) { 0 }
+            waveProfilesReady = true
+            logDebug("DB_LOAD", "loadWaveFiles mode=$waveModeFilter filtered=$filteredCount usb=$cachedUsbProfiles psu=$cachedPsuProfiles")
         }
     }
 
@@ -5128,6 +5196,61 @@ class RPhoneDesktopApp : Application() {
         }
     }
 
+    private fun logDebug(tag: String, message: String) {
+        try {
+            val timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"))
+            val dataDir = File(System.getProperty("user.home"), ".rphone-v3")
+            if (!dataDir.exists()) dataDir.mkdirs()
+            val logFile = File(dataDir, "desktop_debug.log")
+            val line = "[$timestamp][$tag] $message\n"
+            scope.launch(Dispatchers.IO) {
+                try {
+                    logFile.appendText(line)
+                } catch (_: Exception) {
+                }
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private suspend fun rebuildWaveProfilesCache(reason: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            if (waveProfilesLoading) return@withContext true
+            waveProfilesLoading = true
+            waveProfilesReady = false
+            try {
+                logDebug("DB_LOAD", "rebuildWaveProfilesCache start reason=$reason")
+                val (found, imported, dbCount) = importLocalRphpFilesToDb()
+                cachedUsbProfiles = try { waveIdManager.getProfilesByMode("USB").size } catch (_: Exception) { 0 }
+                cachedPsuProfiles = try { waveIdManager.getProfilesByMode("PSU").size } catch (_: Exception) { 0 }
+                waveProfilesReady = true
+                logDebug("DB_LOAD", "rebuildWaveProfilesCache done found=$found imported=$imported db=$dbCount usb=$cachedUsbProfiles psu=$cachedPsuProfiles")
+                withContext(Dispatchers.Main) {
+                    loadWaveFiles()
+                }
+                true
+            } catch (e: Exception) {
+                logDebug("DB_LOAD", "rebuildWaveProfilesCache failed: ${e.message}")
+                false
+            } finally {
+                waveProfilesLoading = false
+            }
+        }
+    }
+
+    private suspend fun ensureWaveProfilesReady(reason: String, timeoutMs: Long = 15000L): Boolean {
+        if (waveProfilesReady) return true
+        if (!waveProfilesLoading) {
+            rebuildWaveProfilesCache(reason)
+        }
+        val started = System.currentTimeMillis()
+        while (!waveProfilesReady && System.currentTimeMillis() - started < timeoutMs) {
+            kotlinx.coroutines.delay(100L)
+        }
+        logDebug("DB_LOAD", "ensureWaveProfilesReady reason=$reason ready=$waveProfilesReady usb=$cachedUsbProfiles psu=$cachedPsuProfiles")
+        return waveProfilesReady
+    }
+
     private suspend fun importLocalRphpFilesToDb(): Triple<Int, Int, Int> {
         return withContext(Dispatchers.IO) {
             try {
@@ -5188,7 +5311,7 @@ class RPhoneDesktopApp : Application() {
                         upsertWaveIndex(filename, filename.removeSuffix(".rphp"), modeTag, "local", f.length())
                         imported++
                     } catch (e: Exception) {
-                        println("Failed import $ {f.name}: ${e.message}")
+                        logDebug("DB_LOAD", "Failed import ${f.name}: ${e.message}")
                     }
                 }
 

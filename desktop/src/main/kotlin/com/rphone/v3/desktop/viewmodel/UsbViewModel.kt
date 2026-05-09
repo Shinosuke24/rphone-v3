@@ -34,6 +34,9 @@ class UsbViewModel(private val storage: FileStorage) {
             fun extractString(key: String): String? = Regex("\"$key\"\\s*:\\s*\"([^\"]*)\"").find(jsonText)?.groups?.get(1)?.value
             fun extractBoolean(key: String): Boolean? = Regex("\"$key\"\\s*:\\s*(true|false)").find(jsonText)?.groups?.get(1)?.value?.equals("true", ignoreCase = true)
 
+            val mode = extractString("mode")?.uppercase()
+            if (mode != null && mode != "USB") return
+
             val volt = extractDouble("volt") ?: 0.0
             val curr = extractDouble("curr") ?: 0.0
             val dp = extractDouble("dp") ?: 0.0
@@ -70,10 +73,16 @@ class UsbViewModel(private val storage: FileStorage) {
 
     private fun detectChargeProtocol(dp: Double, dm: Double): String {
         return when {
-            dp < 0.1 && dm < 0.1 -> "Standard Charging"
-            dp > 2.7 && dm < 0.1 -> "Apple Fast Charge"
-            dp > 2.7 && dm > 2.7 -> "QC 2.0/3.0"
-            else -> "Standard Charging"
+            dp < 0.3 && dm < 0.3 -> "SDP 500mA"
+            dp in 3.0..3.6 && dm in 0.4..0.8 -> "QC 3.0"
+            dp in 3.0..3.6 && dm < 0.3 -> "QC 2.0"
+            dp >= 2.5 && dm >= 2.5 -> "QC 4.0+ / DCP"
+            dp in 2.4..3.0 && dm in 1.7..2.3 -> "Apple 12W"
+            dp in 1.7..2.3 && dm in 1.7..2.3 -> "CDP / Apple 5W"
+            dp in 0.9..1.5 && dm < 0.5 -> "Samsung AFC"
+            dp in 0.5..0.9 && dm < 0.3 -> "MTK PE"
+            dp >= 0.3 || dm >= 0.3 -> "Fast Charging"
+            else -> "Unknown"
         }
     }
 
