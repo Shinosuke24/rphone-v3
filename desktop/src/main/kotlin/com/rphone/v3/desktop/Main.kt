@@ -11,6 +11,7 @@ import com.rphone.v3.desktop.platform.DesktopSerialConnection
 import com.rphone.v3.desktop.tts.DesktopTtsManager
 import com.rphone.v3.desktop.scheduler.BackgroundTaskScheduler
 import com.rphone.v3.desktop.scheduler.SupabaseCloudPollingTask
+import com.rphone.v3.desktop.util.AutoReconnect
 import com.google.gson.JsonParser
 import com.google.gson.GsonBuilder
 import javafx.application.Application
@@ -103,11 +104,13 @@ class RPhoneDesktopApp : Application() {
     private lateinit var serial: SerialConnection
     private lateinit var primaryStage: Stage
     private var dtwThresholdPercent: Int = 100
+    private var currentMaxAmp: Double = 3.0
     private lateinit var storage: FileStorage
     private lateinit var notification: PlatformNotification
     private lateinit var waveIdManager: com.rphone.v3.desktop.managers.WaveIDManager
     private lateinit var ttsManager: DesktopTtsManager
     private lateinit var backgroundScheduler: BackgroundTaskScheduler
+    private lateinit var autoReconnect: AutoReconnect
     private var cloudPollingTask: SupabaseCloudPollingTask? = null
     private lateinit var waveSubNav: VBox
 
@@ -348,6 +351,28 @@ class RPhoneDesktopApp : Application() {
         storage = PlatformProvider.getFileStorage()
         notification = PlatformProvider.getNotification()
         waveIdManager = com.rphone.v3.desktop.managers.WaveIDManager()
+        if (serial is DesktopSerialConnection) {
+            autoReconnect = AutoReconnect(serial as DesktopSerialConnection)
+            autoReconnect.mulai()
+            scope.launch {
+                autoReconnect.reconnectStatuses().collect { status ->
+                    if (!status.isRetrying && status.message.startsWith("Reconnected", ignoreCase = true)) {
+                        withContext(Dispatchers.Main) {
+                            updateConnectionState(true, deviceCombo.value ?: connectedDevice)
+                            runSensorCheck()
+                            runFirmwareCheck()
+                            if (activePage == DesktopPage.PROBE) {
+                                sendCommand("SET_MODE_PROBE")
+                            } else if (activePage == DesktopPage.PSU) {
+                                sendCommand("SET_MODE_PSU")
+                            } else {
+                                sendCommand("SET_MODE_USB")
+                            }
+                        }
+                    }
+                }
+            }
+        }
         preloadPersistentSettings()
         
         // Initialize Text-to-Speech (equivalent to ProbeTtsManager in APK)
@@ -518,6 +543,13 @@ class RPhoneDesktopApp : Application() {
         cloudPollingTask?.stop()
         backgroundScheduler.shutdown()
         ttsManager.shutdown()
+        if (::autoReconnect.isInitialized) {
+            autoReconnect.berhenti()
+        }
+        try {
+            com.rphone.v3.desktop.util.FirmwareChecker.shutdown()
+        } catch (_: Exception) {
+        }
         try {
             kotlinx.coroutines.runBlocking {
                 try { serial.disconnect() } catch (_: Exception) {}
@@ -795,6 +827,13 @@ class RPhoneDesktopApp : Application() {
             maxWidth = 420.0
             children.addAll(
                 card("USB Metrics", metrics),
+                // small PSU meter in USB page
+                card("PSU METER", VBox(6.0).apply {
+                    val miniPsuCanvas = Canvas(320.0, 140.0)
+                    miniPsuCanvas.widthProperty().addListener { _, _, _ -> drawNeedleMeter(miniPsuCanvas.graphicsContext2D, miniPsuCanvas.width, miniPsuCanvas.height, purple, psuWaveState) }
+                    miniPsuCanvas.heightProperty().addListener { _, _, _ -> drawNeedleMeter(miniPsuCanvas.graphicsContext2D, miniPsuCanvas.width, miniPsuCanvas.height, purple, psuWaveState) }
+                    children.addAll(miniPsuCanvas)
+                }),
                 actionPanel,
                 usbAnalysisStatus,
                 usbAnalysisProgress
@@ -2799,32 +2838,50 @@ class RPhoneDesktopApp : Application() {
 
     private fun waveTabRow(state: DesktopWaveformState, accent: Color, canvas: Canvas): Node {
         val group = ToggleGroup()
+        // mode selector mapping
+        val modeChoices = listOf("200mA" to 0.2, "500mA" to 0.5, "1A" to 1.0, "2A" to 2.0, "3A" to 3.0)
+        val modeCombo = ComboBox<String>(FXCollections.observableArrayList(modeChoices.map { it.first })).apply {
+            value = "3A"
+            prefWidth = 110.0
+            style = comboStyle()
+            setOnAction {
+                val sel = value
+                val v = modeChoices.find { it.first == sel }?.second ?: 3.0
+                currentMaxAmp = v
+                // redraw canvases
+                Platform.runLater {
+                    drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan, usbWaveState)
+                    drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple, psuWaveState)
+                    drawNeedleMeter(psuMeterCanvas.graphicsContext2D, psuMeterCanvas.width, psuMeterCanvas.height, purple, psuWaveState)
+                }
+            }
+        }
+
         return HBox(6.0).apply {
-            children.addAll(
-                listOf(
-                    WaveChannel.CURRENT to "ARUS",
-                    WaveChannel.VOLTAGE to "VOLT",
-                    WaveChannel.POWER to "DAYA",
-                    WaveChannel.ALL to "ALL"
-                ).map { (channel, text) ->
-                    ToggleButton(text).apply {
-                        toggleGroup = group
-                        isSelected = state.activeChannel == channel
-                        maxWidth = Double.MAX_VALUE
-                        prefWidth = 110.0
-                        alignment = Pos.CENTER
-                        style = tabStyle(accent, isSelected)
-                        selectedProperty().addListener { _, _, selected ->
-                            style = tabStyle(accent, selected)
-                        }
-                        setOnAction {
-                            state.activeChannel = channel
-                            canvas.graphicsContext2D.clearRect(0.0, 0.0, canvas.width, canvas.height)
-                            drawWaveform(canvas.graphicsContext2D, canvas.width, canvas.height, accent, state)
-                        }
+            val buttons = listOf(
+                WaveChannel.CURRENT to "ARUS",
+                WaveChannel.VOLTAGE to "VOLT",
+                WaveChannel.POWER to "DAYA",
+                WaveChannel.ALL to "ALL"
+            ).map { (channel, text) ->
+                ToggleButton(text).apply {
+                    toggleGroup = group
+                    isSelected = state.activeChannel == channel
+                    maxWidth = Double.MAX_VALUE
+                    prefWidth = 110.0
+                    alignment = Pos.CENTER
+                    style = tabStyle(accent, isSelected)
+                    selectedProperty().addListener { _, _, selected ->
+                        style = tabStyle(accent, selected)
+                    }
+                    setOnAction {
+                        state.activeChannel = channel
+                        canvas.graphicsContext2D.clearRect(0.0, 0.0, canvas.width, canvas.height)
+                        drawWaveform(canvas.graphicsContext2D, canvas.width, canvas.height, accent, state)
                     }
                 }
-            )
+            }
+            children.addAll(buttons + listOf(Region().apply { HBox.setHgrow(this, Priority.ALWAYS) }, modeCombo))
         }
     }
 
@@ -2870,7 +2927,7 @@ class RPhoneDesktopApp : Application() {
         gc.fillRect(0.0, 0.0, width, height)
 
         val current = state.currentBuf.lastOrNull() ?: 0.0
-        val maxA = maxOf(3.0, current.coerceAtLeast(0.0) * 1.2)
+        val maxA = currentMaxAmp.coerceAtLeast(0.05)
         val centerX = width / 2.0
         val centerY = height * 0.80
         val radius = minOf(width * 0.38, height * 0.62)
@@ -2879,17 +2936,14 @@ class RPhoneDesktopApp : Application() {
         gc.lineWidth = 2.0
         gc.strokeOval(centerX - radius, centerY - radius, radius * 2.0, radius * 2.0)
 
-        val ticks = listOf(
-            0.0 to "0",
-            0.2 to "200mA",
-            0.5 to "500mA",
-            1.0 to "1A",
-            2.0 to "2A",
-            3.0 to "3A"
-        )
+        val allTickCandidates = listOf(0.0 to "0", 0.2 to "200mA", 0.5 to "500mA", 1.0 to "1A", 2.0 to "2A", 3.0 to "3A")
+        val ticks = allTickCandidates.filter { it.first <= maxA }
+        // smaller arc (less than semicircle)
+        val startAngle = Math.PI * 0.8
+        val endAngle = Math.PI * 0.2
         ticks.forEach { (amp, label) ->
             val ratio = (amp / maxA).coerceIn(0.0, 1.0)
-            val angle = Math.PI * (1.0 - ratio)
+            val angle = startAngle - (startAngle - endAngle) * ratio
             val inner = radius * 0.84
             val outer = radius * 0.97
             val x1 = centerX + kotlin.math.cos(angle) * inner
@@ -2900,11 +2954,11 @@ class RPhoneDesktopApp : Application() {
             gc.lineWidth = 1.2
             gc.strokeLine(x1, y1, x2, y2)
             gc.fill = textSecondary
-            gc.fillText(label, centerX + kotlin.math.cos(angle) * (radius * 1.08) - 14.0, centerY - kotlin.math.sin(angle) * (radius * 1.08))
+            gc.fillText(label, centerX + kotlin.math.cos(angle) * (radius * 1.06) - 18.0, centerY - kotlin.math.sin(angle) * (radius * 1.06))
         }
 
         val ratio = (current / maxA).coerceIn(0.0, 1.0)
-        val angle = Math.PI * (1.0 - ratio)
+        val angle = startAngle - (startAngle - endAngle) * ratio
         val needleLen = radius * 0.78
         val needleX = centerX + kotlin.math.cos(angle) * needleLen
         val needleY = centerY - kotlin.math.sin(angle) * needleLen
@@ -2914,8 +2968,32 @@ class RPhoneDesktopApp : Application() {
         gc.fill = accent
         gc.fillOval(centerX - 6.0, centerY - 6.0, 12.0, 12.0)
 
+        // boxed digital display in center
+        val boxW = radius * 0.9
+        val boxH = radius * 0.28
+        val boxX = centerX - boxW / 2.0
+        val boxY = centerY - radius * 0.6
+        gc.fill = Color.web("#05070F")
+        gc.fillRect(boxX - 6.0, boxY - 6.0, boxW + 12.0, boxH * 2.4 + 12.0)
+        gc.stroke = border
+        gc.lineWidth = 1.5
+        gc.strokeRect(boxX - 6.0, boxY - 6.0, boxW + 12.0, boxH * 2.4 + 12.0)
+
+        // top digital: voltage
+        val volt = String.format(java.util.Locale.US, "%.2f V", state.voltageBuf.lastOrNull() ?: 0.0)
+        gc.fill = textSecondary
+        gc.font = Font.font(12.0)
+        gc.fillText("VOLT", boxX + 8.0, boxY + 14.0)
+        gc.font = Font.font(18.0)
         gc.fill = textPrimary
-        gc.fillText(String.format(java.util.Locale.US, "%.3f A", current), centerX - 30.0, centerY - radius * 0.25)
+        gc.fillText(volt, boxX + 8.0, boxY + 34.0)
+
+        // middle digital: current (big)
+        val currText = String.format(java.util.Locale.US, "%.3f A", current)
+        gc.fill = textPrimary
+        gc.font = Font.font(20.0)
+        gc.fillText(currText, boxX + 8.0, boxY + boxH * 1.6)
+
         gc.fill = textSecondary
         gc.fillText("PSU METER", centerX - 28.0, 24.0)
     }
@@ -3109,6 +3187,9 @@ class RPhoneDesktopApp : Application() {
         }
         if (serial.isConnected()) {
             scope.launch {
+                if (::autoReconnect.isInitialized) {
+                    autoReconnect.berhenti()
+                }
                 serial.disconnect()
                 logDebug("USB_CONN", "disconnect requested")
                 withContext(Dispatchers.Main) {
@@ -3141,7 +3222,12 @@ class RPhoneDesktopApp : Application() {
                 if (ok) {
                     connectedDevice = device
                     updateConnectionState(true, device)
+                    if (::autoReconnect.isInitialized) {
+                        autoReconnect.mulai()
+                    }
                     startReceiveLoop()
+                    runSensorCheck()
+                    runFirmwareCheck()
                     appendConsole("SYSTEM", "Connected to ${device.name}")
                     when (activePage) {
                         DesktopPage.PSU -> sendCommand("SET_MODE_PSU")
@@ -3177,6 +3263,23 @@ class RPhoneDesktopApp : Application() {
             }
         } catch (e: Exception) {
             logDebug("FIRMWARE", "check failed: ${e.message}")
+        }
+    }
+
+    private fun runSensorCheck() {
+        try {
+            val desktopSerial = serial as? com.rphone.v3.desktop.platform.DesktopSerialConnection ?: return
+            com.rphone.v3.desktop.util.SensorChecker.checkSensors(desktopSerial) { status ->
+                Platform.runLater {
+                    when {
+                        status.ina3221 && status.ads1115 -> notification.showSuccess("Sensor check OK")
+                        status.ina3221 || status.ads1115 -> notification.showMessage("Sensor check partial: INA3221=${status.ina3221} ADS1115=${status.ads1115}")
+                        else -> notification.showError("Sensor check failed: ${status.rawMessage}")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logDebug("SENSOR", "check failed: ${e.message}")
         }
     }
 
@@ -5911,16 +6014,16 @@ class RPhoneDesktopApp : Application() {
 
         fun ceilingFor(channel: WaveChannel): Double {
             val maxVal = when (channel) {
-                WaveChannel.CURRENT -> state.currentBuf.maxOrNull() ?: 0.0
+                WaveChannel.CURRENT -> currentMaxAmp // use selected max amp
                 WaveChannel.VOLTAGE -> state.voltageBuf.maxOrNull() ?: 0.0
                 WaveChannel.POWER -> state.powerBuf.maxOrNull() ?: 0.0
                 WaveChannel.ALL -> listOf(
-                    state.currentBuf.maxOrNull() ?: 0.0,
+                    currentMaxAmp,
                     state.voltageBuf.maxOrNull() ?: 0.0,
                     state.powerBuf.maxOrNull() ?: 0.0
-                ).maxOrNull() ?: 0.0
+                ).maxOrNull() ?: currentMaxAmp
             }
-            return (maxVal.coerceAtLeast(0.001)) * 1.2
+            return (maxVal.coerceAtLeast(0.001))
         }
 
         fun valueToY(value: Double, ceiling: Double): Double {

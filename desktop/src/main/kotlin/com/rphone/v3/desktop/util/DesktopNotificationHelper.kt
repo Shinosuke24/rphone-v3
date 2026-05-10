@@ -11,9 +11,7 @@ import javafx.scene.layout.VBox
 import javafx.scene.paint.Color
 import javafx.stage.Stage
 import javafx.stage.StageStyle
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.GlobalScope
+import kotlin.concurrent.thread
 import java.util.logging.Logger
 
 /**
@@ -74,8 +72,8 @@ object DesktopNotificationHelper {
                 stage.show()
 
                 // Auto-hide after duration
-                GlobalScope.launch {
-                    delay(durationMs)
+                thread(isDaemon = true) {
+                    Thread.sleep(durationMs)
                     Platform.runLater {
                         stage.close()
                     }

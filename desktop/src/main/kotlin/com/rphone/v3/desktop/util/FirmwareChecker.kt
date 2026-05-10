@@ -2,6 +2,8 @@ package com.rphone.v3.desktop.util
 
 import com.rphone.v3.desktop.platform.DesktopSerialConnection
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
 import java.util.logging.Logger
 
 /**
@@ -15,12 +17,14 @@ import java.util.logging.Logger
  */
 object FirmwareChecker {
     private val logger = Logger.getLogger(FirmwareChecker::class.java.name)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     const val KNOWN_FIRMWARE_VERSION = "3.3.18"
 
     private var sudahCek = false
     private var deviceFwVersion: String = ""
     private var firmwareInfo: FirmwareUpdateHelper.FirmwareInfo? = null
+    private var checkJob: Job? = null
 
     /**
      * Entry point — call after connection established
@@ -32,7 +36,8 @@ object FirmwareChecker {
         if (sudahCek) return
         sudahCek = true
 
-        GlobalScope.launch(Dispatchers.IO) {
+        checkJob?.cancel()
+        checkJob = scope.launch {
             try {
                 // Step 1: Query ESP32 firmware version
                 delay(1_000)
@@ -83,6 +88,14 @@ object FirmwareChecker {
         sudahCek = false
         deviceFwVersion = ""
         firmwareInfo = null
+        checkJob?.cancel()
+        checkJob = null
+    }
+
+    fun shutdown() {
+        checkJob?.cancel()
+        checkJob = null
+        scope.cancel()
     }
 
     fun getDeviceFirmwareVersion(): String = deviceFwVersion
@@ -92,23 +105,11 @@ object FirmwareChecker {
         serialConnection: DesktopSerialConnection,
         timeoutMs: Long
     ): String? {
-        val startTime = System.currentTimeMillis()
-        val bufferLines = mutableListOf<String>()
-
         return withTimeoutOrNull(timeoutMs) {
-            while (System.currentTimeMillis() - startTime < timeoutMs) {
-                val data = serialConnection.readData()
-                if (data.isNotEmpty()) {
-                    bufferLines.add(data)
-                    val combined = bufferLines.joinToString("\n")
-                    if (combined.contains("FW_VER:")) {
-                        val match = Regex("FW_VER:([\\d.]+)").find(combined)
-                        if (match != null) return@withTimeoutOrNull match.groupValues[1]
-                    }
-                }
-                delay(100)
-            }
-            null
+            serialConnection.receive()
+                .map { it.toString(Charsets.UTF_8).trim() }
+                .firstOrNull { it.contains("FW_VER:", ignoreCase = true) }
+                ?.let { line -> Regex("FW_VER:([\\d.]+)").find(line)?.groupValues?.get(1) }
         }
     }
 }

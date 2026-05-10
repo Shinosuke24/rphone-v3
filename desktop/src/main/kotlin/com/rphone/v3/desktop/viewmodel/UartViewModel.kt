@@ -5,7 +5,6 @@ import com.rphone.v3.core.platform.FileStorage
 import com.rphone.v3.desktop.ai.UartAiAnalyzer
 import javafx.application.Platform
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,6 +12,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -46,6 +48,7 @@ class UartViewModel(private val storage: FileStorage) {
     private val parsedBuffer = ArrayDeque<String>()
     private val customRules = mutableListOf<UartAiAnalyzer.UartRule>()
     private var parseJob: Job? = null
+    private val vmScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _streamState = MutableStateFlow(StreamState.IDLE)
     val streamState: StateFlow<StreamState> = _streamState
     private var baudRateValue = 115200
@@ -98,7 +101,7 @@ class UartViewModel(private val storage: FileStorage) {
     }
 
     fun loadBaudRate() {
-        GlobalScope.launch {
+        vmScope.launch {
             val text = storage.load("uart_baud.txt").orEmpty().trim()
             val baud = text.toIntOrNull() ?: 115200
             baudRateValue = baud
@@ -107,7 +110,7 @@ class UartViewModel(private val storage: FileStorage) {
 
     fun triggerFullParse() {
         parseJob?.cancel()
-        parseJob = GlobalScope.launch(Dispatchers.IO) {
+        parseJob = vmScope.launch(Dispatchers.IO) {
             _streamState.value = StreamState.PARSING
             val snapshot = consoleMutex.withLock { consoleBuffer.toList() }
             val vendor = detectVendor(snapshot).also { if (it != "UNKNOWN") detectedVendor = it }
@@ -134,7 +137,7 @@ class UartViewModel(private val storage: FileStorage) {
     fun addConsoleMessage(direction: String, text: String) {
         val timestamp = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))
         val msg = "[$direction $timestamp] $text"
-        GlobalScope.launch {
+        vmScope.launch {
             consoleMutex.withLock {
                 consoleBuffer.addLast(msg)
                 while (consoleBuffer.size > 1500) consoleBuffer.removeFirst()
@@ -168,7 +171,7 @@ class UartViewModel(private val storage: FileStorage) {
     private fun processLine(line: String) {
         val clean = bersihkanLine(line)
         if (clean.isBlank()) return
-        GlobalScope.launch {
+        vmScope.launch {
             consoleMutex.withLock {
                 consoleBuffer.addLast(clean)
                 while (consoleBuffer.size > 1500) consoleBuffer.removeFirst()
@@ -177,7 +180,7 @@ class UartViewModel(private val storage: FileStorage) {
             if (_streamState.value == StreamState.IDLE) _streamState.value = StreamState.STREAMING
         }
         parseJob?.cancel()
-        parseJob = GlobalScope.launch {
+        parseJob = vmScope.launch {
             delay(300L)
             triggerFullParse()
         }
@@ -235,7 +238,7 @@ class UartViewModel(private val storage: FileStorage) {
     }
 
     private fun loadRules() {
-        GlobalScope.launch {
+        vmScope.launch {
             val json = storage.load("uart_rules.json").orEmpty()
             if (json.isBlank()) {
                 if (customRules.isEmpty()) {
@@ -265,10 +268,10 @@ class UartViewModel(private val storage: FileStorage) {
     }
 
     private fun saveRules() {
-        GlobalScope.launch { storage.save("uart_rules.json", gson.toJson(customRules)) }
+        vmScope.launch { storage.save("uart_rules.json", gson.toJson(customRules)) }
     }
 
     private fun saveBaudRate() {
-        GlobalScope.launch { storage.save("uart_baud.txt", baudRateValue.toString()) }
+        vmScope.launch { storage.save("uart_baud.txt", baudRateValue.toString()) }
     }
 }

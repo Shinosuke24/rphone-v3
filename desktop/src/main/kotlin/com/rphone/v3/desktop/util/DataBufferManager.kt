@@ -10,7 +10,7 @@ object DataBufferManager {
     private val logger = Logger.getLogger(DataBufferManager::class.java.name)
     
     // Buffer configuration
-    const val MAX_SAMPLE_POINTS = 300
+    const val MAX_SAMPLE_POINTS = 50_000
     const val MAX_UART_BUFFER_SIZE = 65536  // 64 KB
     const val CLEANUP_THRESHOLD_PERCENT = 85
     const val TARGET_CLEANUP_PERCENT = 50
