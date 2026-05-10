@@ -1239,6 +1239,12 @@ class RPhoneDesktopApp : Application() {
             isSelected = true
         }
         settingsStatus = label("Ready", textSecondary, 11.0, false)
+        
+        // Sync Server setting
+        val syncServerUrl = TextField().apply {
+            promptText = "https://supabase-project.supabase.co"
+            style = controlStyle()
+        }
 
         dtwThresholdLabel = label("${dtwThresholdPercent}%", cyan, 14.0, true)
 
@@ -1251,9 +1257,10 @@ class RPhoneDesktopApp : Application() {
         val aiApiKey = TextField().apply { promptText = "API Key"; style = controlStyle() }
         val aiBaseUrl = TextField().apply { promptText = "Base URL (liteLLM only)"; style = controlStyle() }
         val aiModelCombo = ComboBox<String>(FXCollections.observableArrayList()).apply {
-            promptText = "Model"
+            promptText = "Pilih atau ketik model name"
             style = comboStyle()
             maxWidth = Double.MAX_VALUE
+            isEditable = true  // Allow custom model input
         }
         settingsUsernameField = TextField().apply { promptText = "Nama teknisi (username)"; style = controlStyle() }
 
@@ -1266,6 +1273,21 @@ class RPhoneDesktopApp : Application() {
                 val newThreshold = newValue.toInt()
                 dtwThresholdPercent = newThreshold
                 dtwThresholdLabel.text = "${newThreshold}%"
+                
+                // Auto-save DTW threshold
+                scope.launch {
+                    val ujson = buildString {
+                        appendLine("{")
+                        appendLine("  \"username\": \"${escapeJson(settingsUsernameField.text)}\",")
+                        appendLine("  \"connectionMode\": \"${modeCombo.value}\",")
+                        appendLine("  \"dtwThreshold\": ${newThreshold}")
+                        appendLine("}")
+                    }
+                    val ok = storage.save("user_settings.json", ujson)
+                    if (ok) {
+                        logDebug("SETTINGS", "DTW auto-saved: ${newThreshold}%")
+                    }
+                }
             }
         }
 
@@ -1437,6 +1459,17 @@ class RPhoneDesktopApp : Application() {
 
         // load existing
         scope.launch {
+            // Load connection settings
+            val connLoaded = storage.load("connection_settings.json").orEmpty()
+            if (connLoaded.isNotBlank()) {
+                val mode = Regex("\"connectionMode\"\\s*:\\s*\"([^\"]+)\"").find(connLoaded)?.groups?.get(1)?.value
+                val server = Regex("\"syncServerUrl\"\\s*:\\s*\"([^\"]*)\"").find(connLoaded)?.groups?.get(1)?.value
+                withContext(Dispatchers.Main) {
+                    if (mode != null && mode in listOf("auto", "bt", "otg")) modeCombo.value = mode
+                    if (server != null) syncServerUrl.text = server
+                }
+            }
+            
             val loaded = storage.load("ai_settings.json")
             if (!loaded.isNullOrEmpty()) {
                 // crude parse
@@ -1458,6 +1491,17 @@ class RPhoneDesktopApp : Application() {
                     if (u != null) aiBaseUrl.text = u
                     if (m != null) aiModelCombo.value = m
                     syncAiFields()
+                    
+                    // Auto-fetch models after loading API settings
+                    if (k != null && k.isNotEmpty()) {
+                        val models = fetchModelsForProvider(p ?: "liteLLM", k, u ?: "")
+                        if (models.isNotEmpty()) {
+                            populateModelChoices(models, m)
+                            logDebug("LOAD", "Auto-fetched ${models.size} models for loaded provider")
+                        } else {
+                            populateModelChoices(defaultModelsForProvider(p ?: "liteLLM"), m)
+                        }
+                    }
                 }
             }
             // load username
@@ -1481,6 +1525,22 @@ class RPhoneDesktopApp : Application() {
         aiCombo.valueProperty().addListener { _, _, newValue ->
             syncAiFields()
             populateModelChoices(defaultModelsForProvider(newValue ?: aiCombo.value), aiModelCombo.value)
+            
+            // Auto-fetch models if API key exists
+            if (aiApiKey.text.isNotEmpty()) {
+                scope.launch {
+                    val provider = newValue ?: aiCombo.value
+                    val apiKey = aiApiKey.text.trim()
+                    val baseUrl = aiBaseUrl.text.trim()
+                    val models = fetchModelsForProvider(provider, apiKey, baseUrl)
+                    withContext(Dispatchers.Main) {
+                        if (models.isNotEmpty()) {
+                            populateModelChoices(models, aiModelCombo.value)
+                            logDebug("MODELS", "Auto-fetched ${models.size} models for $provider")
+                        }
+                    }
+                }
+            }
         }
         syncAiFields()
 
@@ -1511,12 +1571,32 @@ class RPhoneDesktopApp : Application() {
                 pageHeader("SETTINGS", textSecondary, "SET"),
                 card("Connection Settings", VBox(8.0).apply {
                     children.addAll(
+                        label("Connection Mode", textSecondary, 11.0, true),
                         modeCombo,
                         autoRefresh,
+                        label("Sync Server URL", textSecondary, 11.0, true),
+                        syncServerUrl,
                         actionButtonsRow(
                             secondaryActionButton("Refresh Devices", textSecondary) { refreshDevices() },
                             secondaryActionButton("Open Data Folder", textSecondary) { notification.showMessage("Data disimpan ke folder .rphone-v3") },
                             secondaryActionButton("Beep", textSecondary) { notification.vibrate(80) }
+                        ),
+                        actionButtonsRow(
+                            primaryActionButton("SAVE CONNECTION", cyan) {
+                                scope.launch {
+                                    val json = buildString {
+                                        appendLine("{")
+                                        appendLine("  \"connectionMode\": \"${modeCombo.value}\",")
+                                        appendLine("  \"syncServerUrl\": \"${syncServerUrl.text.trim()}\",")
+                                        appendLine("  \"autoRefresh\": ${autoRefresh.isSelected}")
+                                        appendLine("}")
+                                    }
+                                    val ok = storage.save("connection_settings.json", json)
+                                    withContext(Dispatchers.Main) {
+                                        if (ok) notification.showSuccess("Connection settings tersimpan") else notification.showError("Gagal simpan")
+                                    }
+                                }
+                            }
                         ),
                         settingsStatus
                     )
@@ -1886,6 +1966,12 @@ class RPhoneDesktopApp : Application() {
 
     private fun showChipsetFilterAndStartAnalysis(mode: String) {
         try {
+            // Validation checks before showing dialog
+            if (!serial.isConnected()) {
+                notification.showError("❌ Device tidak terhubung. Sambungkan terlebih dahulu!")
+                return
+            }
+            
             if (mode.uppercase() == "USB") {
                 showUsbAnalysisDialog()
                 return
