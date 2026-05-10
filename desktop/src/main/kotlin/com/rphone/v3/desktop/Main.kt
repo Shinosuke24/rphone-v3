@@ -1083,11 +1083,12 @@ class RPhoneDesktopApp : Application() {
         }
 
         val tileGrid = GridPane().apply {
-            hgap = 10.0
-            vgap = 10.0
+            hgap = 12.0
+            vgap = 12.0
             prefWidth = 720.0
             minWidth = 320.0
             maxWidth = Double.MAX_VALUE
+            padding = Insets(10.0)
             ColumnConstraints().apply { percentWidth = 50.0 }.also { columnConstraints.add(it) }
             ColumnConstraints().apply { percentWidth = 50.0 }.also { columnConstraints.add(it) }
             add(waveTile("🗂", "Rekam Baru", "Rekam arus boot HP") { sendCommand("BUZZ_REKAM_BARU"); recordWaveProfile() }, 0, 0)
@@ -1096,9 +1097,11 @@ class RPhoneDesktopApp : Application() {
             add(waveTile("📥", "Import .rphp", "Tambah dari komunitas") { sendCommand("BUZZ_IMPORT"); importWaveLog() }, 1, 1)
         }
 
-        val menuCard = card("WAVE MENU", VBox(8.0).apply {
+        val menuCard = card("WAVE MENU", VBox(10.0).apply {
+            padding = Insets(8.0)
             children.addAll(
-                label("Pilih aksi WaveID", textSecondary, 10.0, false),
+                label("📋 Pilih aksi WaveID", textPrimary, 13.0, true),
+                label("Rekam, bandingkan, atau impor waveform profil HP", textSecondary, 10.0, false),
                 tileGrid
             )
         })
@@ -1132,17 +1135,22 @@ class RPhoneDesktopApp : Application() {
         return Button().apply {
             maxWidth = Double.MAX_VALUE
             minWidth = Double.MAX_VALUE
-            prefHeight = 130.0
+            prefHeight = 150.0
+            minHeight = 140.0
             isMnemonicParsing = false
             isFocusTraversable = false
             isWrapText = true
-            style = cardStyle()
+            style = cardStyle() + """; 
+                -fx-cursor: hand;
+                -fx-text-fill: transparent;
+                -fx-padding: 12;
+            """
             isPickOnBounds = true
-            graphic = VBox(4.0).apply {
+            graphic = VBox(6.0).apply {
                 alignment = Pos.CENTER
                 children.addAll(
-                    label(icon, textPrimary, 24.0, false),
-                    label(title, textPrimary, 24.0 / 1.5, true),
+                    label(icon, textPrimary, 32.0, false),
+                    label(title, textPrimary, 18.0, true),
                     label(subtitle, textSecondary, 11.0, false)
                 )
             }
