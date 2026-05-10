@@ -148,6 +148,12 @@ class RPhoneDesktopApp : Application() {
     private lateinit var dtwThresholdLabel: Label
     private lateinit var clockLabel: Label
     private lateinit var settingsUsernameField: TextField
+    private lateinit var calUsbVoltageSlider: Slider
+    private lateinit var calUsbCurrentSlider: Slider
+    private lateinit var calPsuVoltageSlider: Slider
+    private lateinit var calPsuCurrentSlider: Slider
+    private lateinit var calDpdmSlider: Slider
+    private lateinit var calibrationStatusLabel: Label
     private lateinit var usbChartCanvas: Canvas
     private lateinit var psuChartCanvas: Canvas
     private lateinit var psuMeterCanvas: Canvas
@@ -201,6 +207,12 @@ class RPhoneDesktopApp : Application() {
     private var probeStableDurationMs = 500L
 
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
+
+    // Screen dim timer (5 min idle auto-dim)
+    private var dimTimeline: Timeline? = null
+    private var lastActivityTimeMs = 0L
+    private var isDimmed = false
+    private lateinit var dimOverlay: StackPane
 
     private val background = Color.web("#050810")
     private val surface = Color.web("#0D1423")
@@ -320,6 +332,9 @@ class RPhoneDesktopApp : Application() {
     }
 
     override fun start(stage: Stage) {
+        // Show splash screen first
+        showSplashScreen(stage)
+        
         primaryStage = stage
         PlatformProvider.initialize(
             DesktopSerialConnection(),
@@ -395,8 +410,7 @@ class RPhoneDesktopApp : Application() {
                 usbMetricDm.text = formatNumber(data.dm, 2)
                 usbMetricPower.text = formatNumber(data.volt * data.curr, 2)
                 usbMetricCharge.text = data.charge
-                usbMetricOcp.text = if (data.ocpEnabled) "ON" else "OFF"
-                    usbMetricOcp.text = data.ocpStatus
+                usbMetricOcp.text = data.ocpStatus
                 usbMetricCapacity.text = if (usbViewModel.getCapacityMah() <= 0.0) "--" else formatNumber(usbViewModel.getCapacityMah(), 1)
                 usbWaveState.addSample(data.curr, data.volt, data.volt * data.curr)
                 drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan, usbWaveState)
@@ -423,6 +437,7 @@ class RPhoneDesktopApp : Application() {
                 }
                 psuWaveState.addSample(data.curr, data.volt, data.volt * data.curr)
                 drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple, psuWaveState)
+                drawNeedleMeter(psuMeterCanvas.graphicsContext2D, psuMeterCanvas.width, psuMeterCanvas.height, purple, psuWaveState)
             }
         }
         psuViewModel.onSendCommand = { cmd -> sendCommand(cmd) }
@@ -438,6 +453,13 @@ class RPhoneDesktopApp : Application() {
             Platform.runLater {
                 uartParsedConsole.text = parsed
                 uartParsedConsole.positionCaret(uartParsedConsole.length)
+            }
+        }
+        uartViewModel.onWarningUpdate = { warnings ->
+            Platform.runLater {
+                if (warnings.isNotEmpty()) {
+                    notification.showMessage("UART warnings: ${warnings.take(3).joinToString(" | ")}")
+                }
             }
         }
 
@@ -484,6 +506,7 @@ class RPhoneDesktopApp : Application() {
             }
         }
         startClock()
+        startScreenDimTimer(stage, root)
     }
 
     override fun stop() {
@@ -1515,6 +1538,45 @@ class RPhoneDesktopApp : Application() {
                         )
                     )
                 }),
+                card("Calibration", VBox(8.0).apply {
+                    fun calibrationRow(title: String, min: Double, max: Double, initial: Double, unit: String): VBox {
+                        val valueLabel = label(String.format(java.util.Locale.US, "%.3f %s", initial, unit), cyan, 11.0, true)
+                        val slider = Slider(min, max, initial).apply {
+                            isShowTickMarks = true
+                            isShowTickLabels = false
+                            majorTickUnit = (max - min) / 4.0
+                            blockIncrement = ((max - min) / 100.0).coerceAtLeast(0.01)
+                            valueProperty().addListener { _, _, newValue ->
+                                valueLabel.text = String.format(java.util.Locale.US, "%.3f %s", newValue.toDouble(), unit)
+                            }
+                        }
+                        when (title) {
+                            "USB Voltage" -> calUsbVoltageSlider = slider
+                            "USB Current" -> calUsbCurrentSlider = slider
+                            "PSU Voltage" -> calPsuVoltageSlider = slider
+                            "PSU Current" -> calPsuCurrentSlider = slider
+                            else -> calDpdmSlider = slider
+                        }
+                        return VBox(4.0).apply {
+                            children.addAll(label(title, textSecondary, 11.0, true), valueLabel, slider)
+                        }
+                    }
+
+                    calibrationStatusLabel = label("Calibration idle", textSecondary, 10.0, false)
+                    children.addAll(
+                        label("Load firmware calibration data or send the full sequence in APK order.", textSecondary, 10.0, false),
+                        calibrationRow("USB Voltage", 0.0, 5.0, 2.5, "V"),
+                        calibrationRow("USB Current", 0.0, 5.0, 1.0, "A"),
+                        calibrationRow("PSU Voltage", 0.0, 20.0, 5.0, "V"),
+                        calibrationRow("PSU Current", 0.0, 20.0, 1.0, "A"),
+                        calibrationRow("DPDM", 0.0, 5.0, 0.0, "V"),
+                        calibrationStatusLabel,
+                        actionButtonsRow(
+                            secondaryActionButton("GET CAL", cyan) { requestCalibrationData() },
+                            primaryActionButton("APPLY CAL", purple) { sendCalibrationSequence() }
+                        )
+                    )
+                }),
                 card("Firmware Update", VBox(8.0).apply {
                     children.addAll(
                         label("Firmware Version: ${com.rphone.v3.desktop.util.FirmwareChecker.KNOWN_FIRMWARE_VERSION}", purple, 11.0, true),
@@ -1643,6 +1705,84 @@ class RPhoneDesktopApp : Application() {
                 })
             )
         })
+    }
+
+    private fun requestCalibrationData() {
+        if (!serial.isConnected()) {
+            notification.showError("Sambungkan device terlebih dahulu")
+            return
+        }
+        calibrationStatusLabel.text = "Requesting calibration data..."
+        sendCommand("GET_CAL")
+    }
+
+    private fun sendCalibrationSequence() {
+        if (!serial.isConnected()) {
+            notification.showError("Sambungkan device terlebih dahulu")
+            return
+        }
+        val sequence = listOf(
+            "SET_V_CAL_USB",
+            "SET_A_CAL_USB",
+            "SET_V_CAL_PSU",
+            "SET_A_CAL_PSU",
+            "SET_DPDM_CAL",
+            "SAVE_CAL"
+        )
+        scope.launch {
+            Platform.runLater { calibrationStatusLabel.text = "Sending calibration sequence..." }
+            sequence.forEachIndexed { index, command ->
+                sendCommandImmediate(command)
+                kotlinx.coroutines.delay(if (index == sequence.lastIndex) 150L else 120L)
+            }
+            withContext(Dispatchers.Main) {
+                calibrationStatusLabel.text = "Calibration sequence sent"
+                notification.showSuccess("Calibration sequence sent in APK order")
+            }
+        }
+    }
+
+    private suspend fun sendCommandImmediate(command: String): Boolean {
+        if (!serial.isConnected()) return false
+        val payload = if (command.endsWith("\n")) command else "$command\n"
+        return serial.send(payload.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun updateCalibrationSlidersFromResponse(jsonText: String) {
+        val root = try {
+            JsonParser.parseString(jsonText).asJsonObject
+        } catch (_: Exception) {
+            return
+        }
+        val calObj = when {
+            root.has("cal_data") && root.get("cal_data").isJsonObject -> root.getAsJsonObject("cal_data")
+            else -> root
+        }
+        fun readValue(vararg keys: String): Double? {
+            for (key in keys) {
+                if (calObj.has(key) && calObj.get(key).isJsonPrimitive && calObj.get(key).asJsonPrimitive.isNumber) {
+                    return calObj.get(key).asDouble
+                }
+            }
+            return null
+        }
+
+        val usbV = readValue("usb_v", "v_usb", "v_cal_usb", "cal_usb_v")
+        val usbA = readValue("usb_a", "a_usb", "a_cal_usb", "cal_usb_a")
+        val psuV = readValue("psu_v", "v_psu", "v_cal_psu", "cal_psu_v")
+        val psuA = readValue("psu_a", "a_psu", "a_cal_psu", "cal_psu_a")
+        val dpdm = readValue("dpdm", "dp_dm", "cal_dpdm", "v_dpdm")
+
+        Platform.runLater {
+            usbV?.let { if (::calUsbVoltageSlider.isInitialized) calUsbVoltageSlider.value = it }
+            usbA?.let { if (::calUsbCurrentSlider.isInitialized) calUsbCurrentSlider.value = it }
+            psuV?.let { if (::calPsuVoltageSlider.isInitialized) calPsuVoltageSlider.value = it }
+            psuA?.let { if (::calPsuCurrentSlider.isInitialized) calPsuCurrentSlider.value = it }
+            dpdm?.let { if (::calDpdmSlider.isInitialized) calDpdmSlider.value = it }
+            if (usbV != null || usbA != null || psuV != null || psuA != null || dpdm != null) {
+                calibrationStatusLabel.text = "Calibration data loaded"
+            }
+        }
     }
 
     private fun pageHeader(titleText: String, accent: Color, badgeText: String): Node {
@@ -2888,6 +3028,7 @@ class RPhoneDesktopApp : Application() {
         connectionStatus.text = if (connected) "Connected" else "Disconnected"
         connectionStatus.style = statusStyle(if (connected) green else red)
         connectionDevice.text = device?.let { "${it.name} (${it.path})" } ?: "No device"
+        probeViewModel.onConnectionStateChanged(connected)
         logDebug("USB_CONN", "state=${if (connected) "connected" else "disconnected"} device=${device?.path ?: "none"}")
     }
 
@@ -2949,8 +3090,9 @@ class RPhoneDesktopApp : Application() {
     }
 
     private fun switchProbeMode(mode: String) {
+        val previousMode = probeActiveMode
         probeActiveMode = mode.uppercase()
-        probeSettlingUntilMs = System.currentTimeMillis() + probeCooldownMs(probeActiveMode)
+        probeSettlingUntilMs = System.currentTimeMillis() + probeCooldownMs(previousMode, probeActiveMode)
         resetProbeStabilityState()
         probeModeLabel.text = when (probeActiveMode) {
             "DIODE" -> "DIODA"
@@ -2981,10 +3123,12 @@ class RPhoneDesktopApp : Application() {
         }
     }
 
-    private fun probeCooldownMs(mode: String): Long {
-        return when (mode.uppercase()) {
-            "VOLT" -> 250L
-            else -> 100L
+    private fun probeCooldownMs(fromMode: String, toMode: String): Long {
+        return when {
+            fromMode == "VOLT" && toMode == "DIODE" -> 800L
+            fromMode == "DIODE" && toMode == "OHM" -> 1200L
+            fromMode == "OHM" && toMode == "VOLT" -> 600L
+            else -> 500L
         }
     }
 
@@ -3196,6 +3340,23 @@ class RPhoneDesktopApp : Application() {
                         storage.save(fname, jsonText)
                     }
                     appendConsole("RX_JSON", jsonText)
+
+                    if (jsonText.contains("\"cal_data\"") || jsonText.contains("\"cal_ok\"") || jsonText.contains("\"cal_saved\"") || jsonText.contains("\"cal_reset\"")) {
+                        updateCalibrationSlidersFromResponse(jsonText)
+                        val calOk = extractBooleanFromJson("cal_ok") ?: false
+                        val calSaved = extractBooleanFromJson("cal_saved") ?: false
+                        val calReset = extractBooleanFromJson("cal_reset") ?: false
+                        val calStatus = when {
+                            calOk -> "Calibration OK"
+                            calSaved -> "Calibration saved"
+                            calReset -> "Calibration reset"
+                            else -> "Calibration data received"
+                        }
+                        Platform.runLater {
+                            calibrationStatusLabel.text = calStatus
+                            notification.showMessage(calStatus)
+                        }
+                    }
 
                     val modeRaw = extractStringFromJson("mode")
                     val mode = modeRaw?.uppercase()
@@ -5480,6 +5641,114 @@ class RPhoneDesktopApp : Application() {
         )
         timer.cycleCount = Timeline.INDEFINITE
         timer.play()
+    }
+
+    private fun startScreenDimTimer(stage: Stage, root: BorderPane) {
+        // Create dim overlay (hidden by default)
+        dimOverlay = StackPane().apply {
+            style = "-fx-background-color: rgba(0, 0, 0, 0.7);"
+            isMouseTransparent = false
+            prefHeight = stage.height
+            prefWidth = stage.width
+            isVisible = false
+            
+            // Click to wake
+            setOnMouseClicked {
+                resetDimTimer()
+            }
+        }
+        
+        // Add dim overlay to root
+        (root.center as? StackPane)?.children?.add(dimOverlay)
+        
+        // Track user activity (mouse/keyboard anywhere on stage)
+        stage.scene.root.addEventFilter(javafx.scene.input.MouseEvent.ANY) {
+            if (!isDimmed) {
+                replaceDimTimeout()
+            }
+        }
+        stage.scene.root.addEventFilter(javafx.scene.input.KeyEvent.ANY) {
+            if (!isDimmed) {
+                replaceDimTimeout()
+            }
+        }
+        
+        lastActivityTimeMs = System.currentTimeMillis()
+        scheduleDimCheck()
+    }
+
+    private fun scheduleDimCheck() {
+        dimTimeline?.stop()
+        dimTimeline = Timeline(
+            KeyFrame(Duration.seconds(5.0), {
+                val idleMs = System.currentTimeMillis() - lastActivityTimeMs
+                val dimThresholdMs = 5 * 60 * 1000  // 5 minutes
+                
+                if (idleMs >= dimThresholdMs && !isDimmed) {
+                    isDimmed = true
+                    Platform.runLater {
+                        dimOverlay.isVisible = true
+                    }
+                }
+            })
+        )
+        dimTimeline?.cycleCount = Timeline.INDEFINITE
+        dimTimeline?.play()
+    }
+
+    private fun replaceDimTimeout() {
+        lastActivityTimeMs = System.currentTimeMillis()
+    }
+
+    private fun resetDimTimer() {
+        isDimmed = false
+        lastActivityTimeMs = System.currentTimeMillis()
+        Platform.runLater {
+            dimOverlay.isVisible = false
+        }
+    }
+
+    private fun showSplashScreen(stage: Stage) {
+        val splash = Stage(StageStyle.UNDECORATED).apply {
+            width = 500.0
+            height = 300.0
+            isAlwaysOnTop = true
+        }
+        
+        val vbox = VBox(20.0).apply {
+            alignment = Pos.CENTER
+            style = "-fx-background-color: linear-gradient(to bottom, #050810, #0D1423);"
+            padding = Insets(40.0)
+            
+            children.addAll(
+                label("WAVEID", cyan, 32.0, true).apply { alignment = Pos.CENTER },
+                label("Phone Repair AI System", textPrimary, 14.0, false).apply { alignment = Pos.CENTER },
+                
+                VBox(8.0).apply {
+                    padding = Insets(20.0, 0.0, 0.0, 0.0)
+                    children.addAll(
+                        label("Checking sensors...", textSecondary, 11.0, false),
+                        ProgressBar().apply {
+                            prefWidth = 300.0
+                            style = "-fx-accent: #00D4FF;"
+                        },
+                        label("Initializing USB connection", textSecondary, 10.0, false)
+                    )
+                }
+            )
+        }
+        
+        splash.scene = Scene(vbox)
+        splash.centerOnScreen()
+        splash.show()
+        
+        // Simulate startup checks with 2-3 second delay
+        Thread {
+            Thread.sleep(2000)
+            Platform.runLater {
+                splash.close()
+            }
+        }.start()
     }
 
     private fun drawWaveform(gc: GraphicsContext, width: Double, height: Double, accent: Color) {

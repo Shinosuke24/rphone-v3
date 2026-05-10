@@ -2,6 +2,9 @@ package com.rphone.v3.desktop.util
 
 import com.rphone.v3.desktop.platform.DesktopSerialConnection
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import java.util.logging.Logger
 
 /**
@@ -17,6 +20,8 @@ class AutoReconnect(
     private val serialConnection: DesktopSerialConnection
 ) {
     private val logger = Logger.getLogger(AutoReconnect::class.java.name)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val reconnectStatusFlow = MutableSharedFlow<ReconnectStatus>(replay = 0, extraBufferCapacity = 32)
 
     companion object {
         private const val MAX_RETRY_ATTEMPTS = 5
@@ -28,6 +33,7 @@ class AutoReconnect(
     private var reconnectJob: Job? = null
     private var retryAttempts = 0
     private var lastConnectionTime = 0L
+    private var monitoringConnection = false
     private val reconnectStatusList = mutableListOf<ReconnectStatus>()
 
     data class ReconnectStatus(
@@ -39,12 +45,15 @@ class AutoReconnect(
     )
 
     fun mulai() {
+        if (reconnectJob?.isActive == true) return
         logger.info("AutoReconnect started")
+        monitorConnection()
     }
 
     fun berhenti() {
         reconnectJob?.cancel()
         reconnectJob = null
+        monitoringConnection = false
         retryAttempts = 0
         logger.info("AutoReconnect stopped")
     }
@@ -56,6 +65,24 @@ class AutoReconnect(
     suspend fun handleDisconnection(): Boolean {
         logger.warning("Connection lost, attempting reconnect...")
         return attemptReconnect()
+    }
+
+    fun reconnectStatuses(): SharedFlow<ReconnectStatus> = reconnectStatusFlow.asSharedFlow()
+
+    private fun monitorConnection() {
+        if (monitoringConnection) return
+        monitoringConnection = true
+        reconnectJob = scope.launch {
+            var wasConnected = serialConnection.isConnected()
+            while (isActive) {
+                val connected = serialConnection.isConnected()
+                if (wasConnected && !connected) {
+                    handleDisconnection()
+                }
+                wasConnected = connected
+                delay(750L)
+            }
+        }
     }
 
     private suspend fun attemptReconnect(): Boolean {
@@ -128,6 +155,7 @@ class AutoReconnect(
             message = message
         )
         reconnectStatusList.add(status)
+        reconnectStatusFlow.tryEmit(status)
         logger.info("ReconnectStatus: $message")
     }
 

@@ -137,6 +137,27 @@ object JsonParser {
 
     fun isBootLogEnd(json: String): Boolean = try { JSONObject(json).optBoolean("boot_log_end", false) } catch (_: Exception) { false }
 
+    fun isInfoMessage(json: String): Boolean = try {
+        val obj = JSONObject(json)
+        obj.optBoolean("info", false) || obj.optString("level").equals("INFO", ignoreCase = true)
+    } catch (_: Exception) {
+        false
+    }
+
+    fun isErrorMessage(json: String): Boolean = try {
+        val obj = JSONObject(json)
+        obj.optBoolean("error", false) || obj.optString("level").equals("ERROR", ignoreCase = true)
+    } catch (_: Exception) {
+        false
+    }
+
+    fun parseInfoMessage(json: String): String = try {
+        val obj = JSONObject(json)
+        obj.optString("message", obj.optString("info", ""))
+    } catch (_: Exception) {
+        ""
+    }
+
     fun toJson(map: Map<String, Any>): String {
         return buildString {
             append("{")

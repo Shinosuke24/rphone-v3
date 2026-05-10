@@ -16,7 +16,7 @@ class DesktopSerialConnection : SerialConnection {
     
     private val logger = LoggerFactory.getLogger(this::class.java)
     private var serialPort: SerialPort? = null
-    private val receiveFlow = MutableSharedFlow<ByteArray>()
+    private val receiveFlow = MutableSharedFlow<ByteArray>(replay = 0, extraBufferCapacity = 100)
     private val executor = Executors.newSingleThreadExecutor()
     private val readBuffer = StringBuilder()
     
@@ -129,12 +129,8 @@ class DesktopSerialConnection : SerialConnection {
                             readBuffer.delete(0, newlineIndex + 1)
                             if (line.isNotBlank()) {
                                 val data = line.toByteArray(Charsets.UTF_8)
-                                try {
-                                    kotlinx.coroutines.runBlocking {
-                                        receiveFlow.emit(data)
-                                    }
-                                } catch (e: Exception) {
-                                    logger.error("Error emitting data", e)
+                                if (!receiveFlow.tryEmit(data)) {
+                                    logger.warn("Dropped serial packet because the receive buffer was full")
                                 }
                             }
                             newlineIndex = readBuffer.indexOf("\n")

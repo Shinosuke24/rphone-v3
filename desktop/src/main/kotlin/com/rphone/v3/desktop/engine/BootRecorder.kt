@@ -19,6 +19,8 @@ class BootRecorder(
     private val powerBuffer = mutableListOf<Double>()
     private val dpBuffer = mutableListOf<Double>()
     private val dmBuffer = mutableListOf<Double>()
+    private var lastDp = Double.NaN
+    private var lastDm = Double.NaN
 
     // Statistics
     private var peakCurrent = 0.0
@@ -26,6 +28,8 @@ class BootRecorder(
     private var idleCount = 0
     private val idleThreshold = 0.05 // 50mA
     private val idleCountThreshold = 25 // Stop after 25 idle samples (5 sec at 200ms interval)
+    private val dpThreshold = 0.05
+    private val dmThreshold = 0.05
 
     data class RecordingStats(
         val durasiMs: Long,
@@ -48,6 +52,8 @@ class BootRecorder(
         powerBuffer.clear()
         dpBuffer.clear()
         dmBuffer.clear()
+        lastDp = Double.NaN
+        lastDm = Double.NaN
         peakCurrent = 0.0
         minCurrent = Double.MAX_VALUE
         idleCount = 0
@@ -71,8 +77,16 @@ class BootRecorder(
         currentBuffer.add(current.coerceAtLeast(0.0))
         voltageBuffer.add(voltage.coerceAtLeast(0.0))
         powerBuffer.add(power.coerceAtLeast(0.0))
-        dpBuffer.add(dp.coerceAtLeast(0.0))
-        dmBuffer.add(dm.coerceAtLeast(0.0))
+        val clampedDp = dp.coerceAtLeast(0.0)
+        val clampedDm = dm.coerceAtLeast(0.0)
+        if (lastDp.isNaN() || kotlin.math.abs(clampedDp - lastDp) > dpThreshold) {
+            dpBuffer.add(clampedDp)
+            lastDp = clampedDp
+        }
+        if (lastDm.isNaN() || kotlin.math.abs(clampedDm - lastDm) > dmThreshold) {
+            dmBuffer.add(clampedDm)
+            lastDm = clampedDm
+        }
 
         // Update peak/min
         if (current > peakCurrent) peakCurrent = current

@@ -2,6 +2,12 @@ package com.rphone.v3.desktop.viewmodel
 
 import com.rphone.v3.core.platform.FileStorage
 import javafx.application.Platform
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -39,6 +45,9 @@ class ProbeViewModel(private val storage: FileStorage) {
     private var probeStableStartMs = 0L
     private var probeHasStartedMeasuring = false
     private var probeLastStableOhm = 0.0
+    private var resyncMode = false
+    private val probeScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var resyncJob: Job? = null
 
     private val historyAktif = mutableListOf<String>()
     private val historyPasif = mutableListOf<String>()
@@ -217,6 +226,23 @@ class ProbeViewModel(private val storage: FileStorage) {
      */
     fun setProbeMode(mode: Mode) {
         currentMode = mode
+    }
+
+    fun onConnectionStateChanged(connected: Boolean) {
+        if (!connected) {
+            resyncMode = true
+            resyncJob?.cancel()
+            return
+        }
+
+        if (!resyncMode) return
+
+        resyncMode = false
+        resyncJob?.cancel()
+        resyncJob = probeScope.launch {
+            delay(500L)
+            onSendCommand?.invoke("BUZZ_PROBE_SAVED")
+        }
     }
 
     /**

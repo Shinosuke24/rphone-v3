@@ -37,6 +37,7 @@ class UartViewModel(private val storage: FileStorage) {
     var onConsoleUpdate: ((String) -> Unit)? = null
     var onParsedUpdate: ((String) -> Unit)? = null
     var onRulesUpdate: ((List<String>) -> Unit)? = null
+    var onWarningUpdate: ((List<String>) -> Unit)? = null
 
     private val gson = Gson()
     private val consoleMutex = Mutex()
@@ -62,7 +63,9 @@ class UartViewModel(private val storage: FileStorage) {
     }
 
     fun stopStreaming() {
-        if (_streamState.value != StreamState.ANALISA) {
+        if (hasLog() && _streamState.value != StreamState.ANALISA) {
+            triggerFullParse()
+        } else if (_streamState.value != StreamState.ANALISA) {
             _streamState.value = StreamState.IDLE
         }
     }
@@ -109,12 +112,16 @@ class UartViewModel(private val storage: FileStorage) {
             val snapshot = consoleMutex.withLock { consoleBuffer.toList() }
             val vendor = detectVendor(snapshot).also { if (it != "UNKNOWN") detectedVendor = it }
             val parsed = buildParsedMessages(snapshot, vendor)
+            val warnings = parseWarnings(snapshot)
             val text = parsed.joinToString("\n") { "[${it.level}] ${it.content}" }
             parsedMutex.withLock {
                 parsedBuffer.clear()
                 parsedBuffer.add(text)
             }
             Platform.runLater { onParsedUpdate?.invoke(text) }
+            if (warnings.isNotEmpty()) {
+                Platform.runLater { onWarningUpdate?.invoke(warnings) }
+            }
             _streamState.value = StreamState.ANALISA
         }
     }
@@ -211,6 +218,20 @@ class UartViewModel(private val storage: FileStorage) {
             )
         }
         return snapshot.map { analyzer.parseLogLine(it, rules) }
+    }
+
+    fun parseWarnings(snapshot: List<String> = consoleBuffer.toList()): List<String> {
+        val patterns = listOf(
+            "SPMI READ COMMAND FAILURE",
+            "SMALLER TX WIN",
+            "WDT RESET",
+            "SN DECRYPTITON FAILED",
+            "SCM CALL FAILED",
+            "LED_WR FAILED"
+        )
+        return snapshot.flatMap { line ->
+            patterns.filter { pattern -> line.contains(pattern, ignoreCase = true) }
+        }.distinct()
     }
 
     private fun loadRules() {
