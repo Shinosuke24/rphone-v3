@@ -8,6 +8,14 @@ import javafx.application.Platform
  */
 class PsuViewModel {
 
+    data class PreAnalisaResult(
+        val status: String,
+        val avgMa: Float,
+        val maxMa: Float,
+        val minMa: Float,
+        val pola: String
+    )
+
     data class PsuData(
         val volt: Double = 0.0,
         val curr: Double = 0.0,
@@ -24,6 +32,12 @@ class PsuViewModel {
     private var psuOcpStatus = "ON"
     private var capacityAccumMah = 0.0
     private var lastUpdateMs = 0L
+    private val liveBuffer = mutableListOf<Float>()
+    private var waveformSnapshot: List<Float> = emptyList()
+
+    var ocpThreshold: Float = 3.0f
+    var onOcpAutoReset: (() -> Unit)? = null
+    var preAnalisaResult: PreAnalisaResult? = null
 
     fun processJson(jsonText: String) {
         try {
@@ -51,7 +65,10 @@ class PsuViewModel {
                 else -> when (ocpEvent) {
                 "trip" -> "TRIP"
                 "reset" -> "ON"
-                "auto_reset" -> "ON"
+                "auto_reset" -> {
+                    onOcpAutoReset?.invoke()
+                    "ON"
+                }
                 "on" -> "ON"
                 "off" -> "OFF"
                 else -> psuOcpStatus
@@ -68,6 +85,13 @@ class PsuViewModel {
             val data = PsuData(volt, curr, pwmEnabled, pwmDur, psuOcpStatus)
             Platform.runLater {
                 onDataUpdate?.invoke(data)
+            }
+
+            synchronized(liveBuffer) {
+                liveBuffer.add(curr.toFloat())
+                if (liveBuffer.size > 2500) {
+                    liveBuffer.removeAt(0)
+                }
             }
         } catch (_: Exception) {
             // swallow
@@ -107,5 +131,43 @@ class PsuViewModel {
     fun resetCapacity() {
         capacityAccumMah = 0.0
         lastUpdateMs = 0L
+    }
+
+    fun snapshotWaveform() {
+        waveformSnapshot = synchronized(liveBuffer) { liveBuffer.toList() }
+    }
+
+    fun getWaveformSnapshot(): List<Float> = waveformSnapshot
+
+    fun getLiveWaveform(): List<Float> = synchronized(liveBuffer) { liveBuffer.toList() }
+
+    fun resetLiveBuffer() {
+        synchronized(liveBuffer) { liveBuffer.clear() }
+        waveformSnapshot = emptyList()
+    }
+
+    fun simpanPreAnalisa(samples: List<Float>) {
+        if (samples.isEmpty()) {
+            preAnalisaResult = null
+            return
+        }
+        val maSamples = samples.map { it * 1000f }
+        val avg = maSamples.average().toFloat()
+        val max = maSamples.maxOrNull() ?: 0f
+        val min = maSamples.minOrNull() ?: 0f
+        val status = when {
+            avg > 300f -> "SHORT_HARD"
+            avg > 30f -> "SHORT_HALUS"
+            else -> "NORMAL"
+        }
+        val half = maSamples.size / 2
+        val avgFirst = if (half > 0) maSamples.take(half).average().toFloat() else avg
+        val avgLast = if (half > 0) maSamples.drop(half).average().toFloat() else avg
+        val pola = when {
+            avgLast > avgFirst * 1.1f -> "naik"
+            avgLast < avgFirst * 0.9f -> "turun"
+            else -> "stabil"
+        }
+        preAnalisaResult = PreAnalisaResult(status, avg, max, min, pola)
     }
 }

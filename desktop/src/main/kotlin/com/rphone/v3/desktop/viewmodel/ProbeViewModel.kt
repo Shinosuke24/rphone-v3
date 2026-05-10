@@ -23,6 +23,7 @@ class ProbeViewModel(private val storage: FileStorage) {
     var onReadingUpdate: ((ProbeReading) -> Unit)? = null
     var onHistoryUpdate: ((List<String>) -> Unit)? = null
     var onSendCommand: ((String) -> Unit)? = null
+    var onTtsEvent: ((String, Mode) -> Unit)? = null
 
     private val probeMedianSize = 3
     private val probeStableDurationMs = 500L
@@ -176,10 +177,16 @@ class ProbeViewModel(private val storage: FileStorage) {
                         target.add(0, entry)
                         while (target.size > 20) target.removeLast()
                         probeStableStartMs = Long.MAX_VALUE
+                        onSendCommand?.invoke("BUZZ_PROBE_SAVED")
+                        if (reading.mode == Mode.VOLT || reading.mode == Mode.DIODE) {
+                            onTtsEvent?.invoke(displayHistory, reading.mode)
+                        }
                         Platform.runLater { onHistoryUpdate?.invoke((historyAktif + historyPasif).sortedDescending()) }
                     }
                 }
             }
+
+            checkContinuity(reading)
 
             Platform.runLater {
                 onReadingUpdate?.invoke(reading)
@@ -247,6 +254,22 @@ class ProbeViewModel(private val storage: FileStorage) {
         isPolling = false
         pollingThread?.interrupt()
         pollingThread = null
+    }
+
+    private var lastShortDisplay = ""
+
+    private fun checkContinuity(reading: ProbeReading) {
+        val isShort = when (reading.mode) {
+            Mode.VOLT -> reading.volt == 0.0
+            Mode.DIODE -> reading.display.equals("0mV", ignoreCase = true) || reading.isShort || reading.vdrop < 0.05
+            Mode.OHM -> reading.display == "0Ω" || reading.display == "0.0Ω" || reading.isShort
+        }
+        if (isShort && reading.display != lastShortDisplay) {
+            onSendCommand?.invoke("BUZZ_CONTINUITY")
+            lastShortDisplay = reading.display
+        } else if (!isShort) {
+            lastShortDisplay = ""
+        }
     }
 }
 

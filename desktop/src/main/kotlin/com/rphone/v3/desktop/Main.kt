@@ -353,6 +353,9 @@ class RPhoneDesktopApp : Application() {
         // initialize probe viewmodel (parity with APK ProbeViewModel)
         probeViewModel = ProbeViewModel(storage)
         probeViewModel.onSendCommand = { cmd -> sendCommand(cmd) }
+        probeViewModel.onTtsEvent = { value, mode ->
+            ttsManager.playProbeReading(mode.name, value)
+        }
         probeViewModel.onReadingUpdate = { reading ->
             Platform.runLater {
                 when (reading.mode) {
