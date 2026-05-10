@@ -150,6 +150,7 @@ class RPhoneDesktopApp : Application() {
     private lateinit var settingsUsernameField: TextField
     private lateinit var usbChartCanvas: Canvas
     private lateinit var psuChartCanvas: Canvas
+    private lateinit var psuMeterCanvas: Canvas
     private lateinit var pageTitle: Label
     private lateinit var pageBadge: Label
     private lateinit var usbDeviceCountLabel: Label
@@ -797,6 +798,10 @@ class RPhoneDesktopApp : Application() {
         psuChartCanvas.widthProperty().addListener { _, _, _ -> drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple, psuWaveState) }
         psuChartCanvas.heightProperty().addListener { _, _, _ -> drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple, psuWaveState) }
 
+        psuMeterCanvas = Canvas(700.0, 220.0)
+        psuMeterCanvas.widthProperty().addListener { _, _, _ -> drawNeedleMeter(psuMeterCanvas.graphicsContext2D, psuMeterCanvas.width, psuMeterCanvas.height, purple, psuWaveState) }
+        psuMeterCanvas.heightProperty().addListener { _, _, _ -> drawNeedleMeter(psuMeterCanvas.graphicsContext2D, psuMeterCanvas.width, psuMeterCanvas.height, purple, psuWaveState) }
+
         psuPwmButton = Button("PWM OFF").apply {
             style = activePsuButtonStyle(false, purple)
             setOnAction {
@@ -876,6 +881,12 @@ class RPhoneDesktopApp : Application() {
                 waveTabRow(psuWaveState, purple, psuChartCanvas),
                 chartPanel(psuChartCanvas),
                 label("Live waveform from PSU analysis", textSecondary, 10.0, false),
+                card("PSU METER", VBox(8.0).apply {
+                    children.addAll(
+                        chartPanel(psuMeterCanvas),
+                        label("Model jarum untuk membaca arus PSU secara visual", textSecondary, 10.0, false)
+                    )
+                }),
                 chartFooter(purple)
             )
         }).apply {
@@ -1062,8 +1073,15 @@ class RPhoneDesktopApp : Application() {
             add(waveTile("📥", "Import .rphp", "Tambah dari komunitas") { sendCommand("BUZZ_IMPORT"); importWaveLog() }, 1, 1)
         }
 
+        val menuCard = card("WAVE MENU", VBox(8.0).apply {
+            children.addAll(
+                label("Pilih aksi WaveID", textSecondary, 10.0, false),
+                tileGrid
+            )
+        })
+
         val rightPane = VBox(10.0).apply {
-            children.addAll(tileGrid)
+            children.addAll(menuCard)
             prefWidth = 740.0
             minWidth = 320.0
             maxWidth = Double.MAX_VALUE
@@ -2573,6 +2591,63 @@ class RPhoneDesktopApp : Application() {
         }
     }
 
+    private fun drawNeedleMeter(gc: GraphicsContext, width: Double, height: Double, accent: Color, state: DesktopWaveformState) {
+        if (width <= 2.0 || height <= 2.0) return
+
+        gc.fill = background
+        gc.fillRect(0.0, 0.0, width, height)
+
+        val current = state.currentBuf.lastOrNull() ?: 0.0
+        val maxA = maxOf(3.0, current.coerceAtLeast(0.0) * 1.2)
+        val centerX = width / 2.0
+        val centerY = height * 0.80
+        val radius = minOf(width * 0.38, height * 0.62)
+
+        gc.stroke = border
+        gc.lineWidth = 2.0
+        gc.strokeOval(centerX - radius, centerY - radius, radius * 2.0, radius * 2.0)
+
+        val ticks = listOf(
+            0.0 to "0",
+            0.2 to "200mA",
+            0.5 to "500mA",
+            1.0 to "1A",
+            2.0 to "2A",
+            3.0 to "3A"
+        )
+        ticks.forEach { (amp, label) ->
+            val ratio = (amp / maxA).coerceIn(0.0, 1.0)
+            val angle = Math.PI * (1.0 - ratio)
+            val inner = radius * 0.84
+            val outer = radius * 0.97
+            val x1 = centerX + kotlin.math.cos(angle) * inner
+            val y1 = centerY - kotlin.math.sin(angle) * inner
+            val x2 = centerX + kotlin.math.cos(angle) * outer
+            val y2 = centerY - kotlin.math.sin(angle) * outer
+            gc.stroke = border
+            gc.lineWidth = 1.2
+            gc.strokeLine(x1, y1, x2, y2)
+            gc.fill = textSecondary
+            gc.fillText(label, centerX + kotlin.math.cos(angle) * (radius * 1.08) - 14.0, centerY - kotlin.math.sin(angle) * (radius * 1.08))
+        }
+
+        val ratio = (current / maxA).coerceIn(0.0, 1.0)
+        val angle = Math.PI * (1.0 - ratio)
+        val needleLen = radius * 0.78
+        val needleX = centerX + kotlin.math.cos(angle) * needleLen
+        val needleY = centerY - kotlin.math.sin(angle) * needleLen
+        gc.stroke = accent
+        gc.lineWidth = 3.0
+        gc.strokeLine(centerX, centerY, needleX, needleY)
+        gc.fill = accent
+        gc.fillOval(centerX - 6.0, centerY - 6.0, 12.0, 12.0)
+
+        gc.fill = textPrimary
+        gc.fillText(String.format(java.util.Locale.US, "%.3f A", current), centerX - 30.0, centerY - radius * 0.25)
+        gc.fill = textSecondary
+        gc.fillText("PSU METER", centerX - 28.0, 24.0)
+    }
+
     private fun connectionCard(title: String, accent: Color): Node {
         return card(title, VBox(6.0).apply {
             children.addAll(
@@ -2619,11 +2694,12 @@ class RPhoneDesktopApp : Application() {
         content.style = "-fx-background-color: transparent;"
         // allow responsive width when window is resized / maximized
         content.maxWidth = Double.MAX_VALUE
-        return StackPane(content).apply {
-            // add top padding so page headers are not obscured by window chrome
-            // reduce top padding slightly so action buttons remain clickable
+        return javafx.scene.control.ScrollPane(content).apply {
+            isFitToWidth = true
+            hbarPolicy = javafx.scene.control.ScrollPane.ScrollBarPolicy.NEVER
+            vbarPolicy = javafx.scene.control.ScrollPane.ScrollBarPolicy.AS_NEEDED
+            style = scrollStyle()
             padding = Insets(6.0, 12.0, 12.0, 12.0)
-            alignment = Pos.TOP_CENTER
         }
     }
 
@@ -5451,6 +5527,15 @@ class RPhoneDesktopApp : Application() {
             return topPad + (1.0 - ratio) * drawH
         }
 
+        fun currentModeLabels(channel: WaveChannel): List<String> {
+            return when (channel) {
+                WaveChannel.CURRENT -> listOf("200mA", "500mA", "1A", "2A", "3A")
+                WaveChannel.VOLTAGE -> listOf("1V", "2V", "3V", "4V", "5V")
+                WaveChannel.POWER -> listOf("1W", "2W", "3W", "4W", "5W")
+                WaveChannel.ALL -> listOf("LOW", "MID", "HIGH")
+            }
+        }
+
         clear()
 
         val waveRight = (width - 18.0)
@@ -5478,6 +5563,19 @@ class RPhoneDesktopApp : Application() {
         gc.strokeLine(waveLeft, 0.0, waveLeft, height)
         // draw right boundary so chart area looks enclosed
         gc.strokeLine(waveRight, 0.0, waveRight, height)
+
+        val labels = currentModeLabels(channel)
+        gc.fill = textSecondary
+        gc.font = Font.font(10.0)
+        labels.forEachIndexed { index, text ->
+            val y = topPad + (drawH / (labels.size.coerceAtLeast(1))) * index
+            gc.fillText(text, waveRight - 42.0, y + 10.0)
+        }
+        for (i in 0..10) {
+            val y = topPad + (drawH / 10.0) * i
+            val leftValue = formatLabel(ceiling * (1.0 - (i / 10.0)))
+            gc.fillText(leftValue, 6.0, y + 4.0)
+        }
 
         if (maxData < 2) {
             val baseY = height - topPad - 4.0
