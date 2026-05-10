@@ -132,6 +132,8 @@ class RPhoneDesktopApp : Application() {
     private lateinit var usbMetricDm: Label
     private lateinit var usbAnalysisProgress: ProgressBar
     private lateinit var usbAnalysisStatus: Label
+    private lateinit var psuAnalysisProgress: ProgressBar
+    private lateinit var psuAnalysisStatus: Label
     private lateinit var psuMetricCurrent: Label
     private lateinit var psuMetricVoltage: Label
     private lateinit var psuMetricPower: Label
@@ -205,6 +207,7 @@ class RPhoneDesktopApp : Application() {
     private var probeLastStableOhm = 0.0
     private var probeStableStartMs = 0L
     private var probeStableDurationMs = 500L
+    private var syncServerUrlOverride: String = ""
 
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
 
@@ -345,6 +348,7 @@ class RPhoneDesktopApp : Application() {
         storage = PlatformProvider.getFileStorage()
         notification = PlatformProvider.getNotification()
         waveIdManager = com.rphone.v3.desktop.managers.WaveIDManager()
+        preloadPersistentSettings()
         
         // Initialize Text-to-Speech (equivalent to ProbeTtsManager in APK)
         ttsManager = DesktopTtsManager()
@@ -824,6 +828,15 @@ class RPhoneDesktopApp : Application() {
         psuMeterCanvas = Canvas(700.0, 220.0)
         psuMeterCanvas.widthProperty().addListener { _, _, _ -> drawNeedleMeter(psuMeterCanvas.graphicsContext2D, psuMeterCanvas.width, psuMeterCanvas.height, purple, psuWaveState) }
         psuMeterCanvas.heightProperty().addListener { _, _, _ -> drawNeedleMeter(psuMeterCanvas.graphicsContext2D, psuMeterCanvas.width, psuMeterCanvas.height, purple, psuWaveState) }
+        psuAnalysisProgress = ProgressBar(0.0).apply {
+            isVisible = false
+            isManaged = false
+            prefWidth = 220.0
+        }
+        psuAnalysisStatus = label("", textSecondary, 11.0, false).apply {
+            isVisible = false
+            isManaged = false
+        }
 
         psuPwmButton = Button("PWM OFF").apply {
             style = activePsuButtonStyle(false, purple)
@@ -891,6 +904,8 @@ class RPhoneDesktopApp : Application() {
                     )
                 )),
                 settingsPanel,
+                psuAnalysisStatus,
+                psuAnalysisProgress,
                 actionButtonsRow(
                     primaryActionButton("MULAI ANALISA", purple) { showChipsetFilterAndStartAnalysis("PSU") },
                     secondaryActionButton("STOP ANALISA", red) { stopAnalysis() },
@@ -2074,12 +2089,12 @@ class RPhoneDesktopApp : Application() {
                     fun startAnalysis() {
                         dialogStage.close()
                         logDebug("ANALYSIS_PSU", "start brand=$selectedBrand model=${if (selectedModel.isBlank()) "AUTO" else selectedModel} startIndex=$startIndex psuCandidates=$cachedPsuProfiles")
-                        usbAnalysisStatus.text = "Menunggu arus... ($selectedBrand ${if (selectedModel.isNotBlank()) selectedModel else "*"})"
-                        usbAnalysisStatus.isVisible = true
-                        usbAnalysisStatus.isManaged = true
-                        usbAnalysisProgress.progress = ProgressBar.INDETERMINATE_PROGRESS
-                        usbAnalysisProgress.isVisible = true
-                        usbAnalysisProgress.isManaged = true
+                        psuAnalysisStatus.text = "Menunggu arus... ($selectedBrand ${if (selectedModel.isNotBlank()) selectedModel else "*"})"
+                        psuAnalysisStatus.isVisible = true
+                        psuAnalysisStatus.isManaged = true
+                        psuAnalysisProgress.progress = ProgressBar.INDETERMINATE_PROGRESS
+                        psuAnalysisProgress.isVisible = true
+                        psuAnalysisProgress.isManaged = true
                         sendCommands("SET_MODE_PSU", "BUZZ_MULAI_ANALISA")
                         scope.launch { performPsuAnalysisWithDetection(selectedBrand, selectedModel, startIndex) }
                     }
@@ -2376,9 +2391,9 @@ class RPhoneDesktopApp : Application() {
             try {
                 if (!ensureWaveProfilesReady("psu-analysis-run")) {
                     withContext(Dispatchers.Main) {
-                        usbAnalysisStatus.text = "Database profile belum siap"
-                        usbAnalysisProgress.isVisible = false
-                        usbAnalysisProgress.isManaged = false
+                        psuAnalysisStatus.text = "Database profile belum siap"
+                        psuAnalysisProgress.isVisible = false
+                        psuAnalysisProgress.isManaged = false
                         notification.showError("Profile belum loaded. Coba Rebuild DB.")
                     }
                     return@withContext
@@ -2404,14 +2419,14 @@ class RPhoneDesktopApp : Application() {
                 val adaShortFinal = statusFinal != "NORMAL"
 
                 withContext(Dispatchers.Main) {
-                    usbAnalysisStatus.text = when (statusFinal) {
+                    psuAnalysisStatus.text = when (statusFinal) {
                         "SHORT_HARD" -> "⚠ SHORT HARD — avg ${avgMaFinal.toInt()}mA"
                         "SHORT_HALUS" -> "⚡ SHORT HALUS — avg ${avgMaFinal.toInt()}mA"
                         else -> "✓ Normal — avg ${avgMaFinal.toInt()}mA"
                     }
-                    usbAnalysisStatus.isVisible = true
-                    usbAnalysisProgress.progress = ProgressBar.INDETERMINATE_PROGRESS
-                    usbAnalysisProgress.isVisible = true
+                    psuAnalysisStatus.isVisible = true
+                    psuAnalysisProgress.progress = ProgressBar.INDETERMINATE_PROGRESS
+                    psuAnalysisProgress.isVisible = true
                 }
 
                 // FASE 2: Menunggu trigger / jalur normal vs short
@@ -2428,19 +2443,19 @@ class RPhoneDesktopApp : Application() {
                     }
                     if (!triggered) {
                         withContext(Dispatchers.Main) {
-                            usbAnalysisStatus.text = "⏱ Timeout — tidak ada arus booting terdeteksi"
-                            usbAnalysisProgress.isVisible = false
+                            psuAnalysisStatus.text = "⏱ Timeout — tidak ada arus booting terdeteksi"
+                            psuAnalysisProgress.isVisible = false
                         }
                         return@withContext
                     }
                     withContext(Dispatchers.Main) {
-                        usbAnalysisStatus.text = "Merekam waveform..."
+                        psuAnalysisStatus.text = "Merekam waveform..."
                     }
                     samples = collectWaveStateSamples(psuWaveState, startIndex, 60_000L, 300)
                     if (samples.isEmpty()) {
                         withContext(Dispatchers.Main) {
-                            usbAnalysisStatus.text = "Gagal merekam waveform"
-                            usbAnalysisProgress.isVisible = false
+                            psuAnalysisStatus.text = "Gagal merekam waveform"
+                            psuAnalysisProgress.isVisible = false
                             notification.showError("Gagal merekam waveform dari PSU")
                         }
                         return@withContext
@@ -2484,7 +2499,7 @@ class RPhoneDesktopApp : Application() {
                     }
                     if (!triggered) {
                         withContext(Dispatchers.Main) {
-                            usbAnalysisStatus.text = "⏱ Tidak ada spike booting — menggunakan snapshot terakhir"
+                            psuAnalysisStatus.text = "⏱ Tidak ada spike booting — menggunakan snapshot terakhir"
                         }
                         // attempt to collect a small sample set
                         samples = collectWaveStateSamples(psuWaveState, startIndex, 5_000L, 1)
@@ -2496,8 +2511,8 @@ class RPhoneDesktopApp : Application() {
                     }
                     if (samples.isEmpty()) {
                         withContext(Dispatchers.Main) {
-                            usbAnalysisStatus.text = "Gagal merekam waveform"
-                            usbAnalysisProgress.isVisible = false
+                            psuAnalysisStatus.text = "Gagal merekam waveform"
+                            psuAnalysisProgress.isVisible = false
                             notification.showError("Gagal merekam waveform dari PSU")
                         }
                         return@withContext
@@ -2510,8 +2525,8 @@ class RPhoneDesktopApp : Application() {
                 logDebug("ANALYSIS_PSU", "candidates total=${profiles.size} filtered=${candidates.size} brand=$brand model=${if (model.isBlank()) "AUTO" else model}")
                 if (candidates.isEmpty()) {
                     withContext(Dispatchers.Main) {
-                        usbAnalysisStatus.text = "Tidak ada profil untuk filter"
-                        usbAnalysisProgress.isVisible = false
+                        psuAnalysisStatus.text = "Tidak ada profil untuk filter"
+                        psuAnalysisProgress.isVisible = false
                         notification.showMessage("Tidak ada profil PSU untuk brand yang dipilih")
                     }
                     return@withContext
@@ -2540,18 +2555,41 @@ class RPhoneDesktopApp : Application() {
                         }
                     }
                     waveHistoryList.items.setAll(lines)
-                    usbAnalysisStatus.text = "Selesai"
-                    usbAnalysisProgress.isVisible = false
+                    psuAnalysisStatus.text = "Selesai"
+                    psuAnalysisProgress.isVisible = false
                     notification.showSuccess("Analisa PSU selesai")
                 }
             } catch (e: Exception) {
                 logDebug("ANALYSIS_PSU", "failed: ${e.message}")
                 withContext(Dispatchers.Main) {
-                    usbAnalysisStatus.text = "Error: ${e.message}"
-                    usbAnalysisProgress.isVisible = false
+                    psuAnalysisStatus.text = "Error: ${e.message}"
+                    psuAnalysisProgress.isVisible = false
                     notification.showError("Analisa gagal: ${e.message}")
                 }
             }
+        }
+    }
+
+    private fun preloadPersistentSettings() {
+        try {
+            kotlinx.coroutines.runBlocking {
+                val userLoaded = storage.load("user_settings.json").orEmpty()
+                if (userLoaded.isNotBlank()) {
+                    val dtwThresh = Regex("\"dtwThreshold\"\\s*:\\s*(\\d+)").find(userLoaded)?.groups?.get(1)?.value?.toIntOrNull()
+                    if (dtwThresh != null && dtwThresh in 90..100) {
+                        dtwThresholdPercent = dtwThresh
+                    }
+                }
+
+                val connLoaded = storage.load("connection_settings.json").orEmpty()
+                if (connLoaded.isNotBlank()) {
+                    val syncUrl = Regex("\"syncServerUrl\"\\s*:\\s*\"([^\"]*)\"").find(connLoaded)?.groups?.get(1)?.value
+                    if (!syncUrl.isNullOrBlank()) {
+                        syncServerUrlOverride = syncUrl.trim()
+                    }
+                }
+            }
+        } catch (_: Exception) {
         }
     }
 

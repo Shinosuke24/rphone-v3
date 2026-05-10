@@ -2,6 +2,8 @@ package com.rphone.v3.desktop
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -10,9 +12,22 @@ object SupabaseUploader {
     private const val SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpscWttZWRhdXB1cWlxaXdveHl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2NjYzNTYsImV4cCI6MjA5MjI0MjM1Nn0.vGLBsZPUo2juN9Izs5lX4-Sck7acEU9UE5hJW-GJ3uc"
     private const val BUCKET = "r-phone-v3"
 
+    private fun resolveSupabaseUrl(): String {
+        return try {
+            val dataDir = File(System.getProperty("user.home"), ".rphone-v3")
+            val settingsFile = File(dataDir, "connection_settings.json")
+            if (!settingsFile.exists()) return SUPABASE_URL
+            val json = JSONObject(settingsFile.readText())
+            val configured = json.optString("syncServerUrl", SUPABASE_URL).trim()
+            if (configured.isBlank()) SUPABASE_URL else configured.removeSuffix("/")
+        } catch (_: Exception) {
+            SUPABASE_URL
+        }
+    }
+
     suspend fun uploadText(path: String, content: String): Boolean {
         return withContext(Dispatchers.IO) {
-            val uploadUrl = "$SUPABASE_URL/storage/v1/object/$BUCKET/$path"
+            val uploadUrl = "${resolveSupabaseUrl()}/storage/v1/object/$BUCKET/$path"
             val conn = URL(uploadUrl).openConnection() as HttpURLConnection
             try {
                 conn.requestMethod = "POST"
@@ -33,7 +48,7 @@ object SupabaseUploader {
 
     suspend fun uploadJson(path: String, json: String): Boolean {
         return withContext(Dispatchers.IO) {
-            val uploadUrl = "$SUPABASE_URL/storage/v1/object/$BUCKET/$path"
+            val uploadUrl = "${resolveSupabaseUrl()}/storage/v1/object/$BUCKET/$path"
             val conn = URL(uploadUrl).openConnection() as HttpURLConnection
             try {
                 conn.requestMethod = "POST"
@@ -54,7 +69,7 @@ object SupabaseUploader {
 
     suspend fun listObjects(prefix: String = ""): String? {
         return withContext(Dispatchers.IO) {
-            val listUrl = "$SUPABASE_URL/storage/v1/object/list/$BUCKET"
+            val listUrl = "${resolveSupabaseUrl()}/storage/v1/object/list/$BUCKET"
             val urlWithPrefix = if (prefix.isNotBlank()) "$listUrl?prefix=$prefix" else listUrl
             val conn = URL(urlWithPrefix).openConnection() as HttpURLConnection
             try {
@@ -79,7 +94,7 @@ object SupabaseUploader {
 
     suspend fun downloadObject(path: String): String? {
         return withContext(Dispatchers.IO) {
-            val getUrl = "$SUPABASE_URL/storage/v1/object/$BUCKET/$path"
+            val getUrl = "${resolveSupabaseUrl()}/storage/v1/object/$BUCKET/$path"
             val conn = URL(getUrl).openConnection() as HttpURLConnection
             try {
                 conn.requestMethod = "GET"
