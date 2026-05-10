@@ -208,18 +208,20 @@ class UartViewModel(private val storage: FileStorage) {
 
     private fun buildParsedMessages(snapshot: List<String>, vendor: String): List<UartAiAnalyzer.ParsedMessage> {
         val analyzer = UartAiAnalyzer()
-        val rules = if (customRules.isNotEmpty()) {
-            customRules
-        } else {
-            listOf(
-                UartAiAnalyzer.UartRule("ERROR", "ERROR", "Error message"),
-                UartAiAnalyzer.UartRule("EXCEPTION", "ERROR", "Exception occurred"),
-                UartAiAnalyzer.UartRule("WARNING", "WARNING", "Warning message"),
-                UartAiAnalyzer.UartRule("TIMEOUT", "WARNING", "Timeout occurred"),
-                UartAiAnalyzer.UartRule("INFO", "INFO", "Info message"),
-                UartAiAnalyzer.UartRule("DEBUG", "INFO", "Debug message")
-            )
-        }
+        
+        // Start with default rules
+        val defaultRules = listOf(
+            UartAiAnalyzer.UartRule("ERROR", "ERROR", "Error message"),
+            UartAiAnalyzer.UartRule("EXCEPTION", "ERROR", "Exception occurred"),
+            UartAiAnalyzer.UartRule("WARNING", "WARNING", "Warning message"),
+            UartAiAnalyzer.UartRule("TIMEOUT", "WARNING", "Timeout occurred"),
+            UartAiAnalyzer.UartRule("INFO", "INFO", "Info message"),
+            UartAiAnalyzer.UartRule("DEBUG", "INFO", "Debug message")
+        )
+        
+        // Merge with custom rules (custom rules take precedence via distinct by pattern)
+        val rules = (customRules + defaultRules).distinctBy { it.pattern }
+        
         return snapshot.map { analyzer.parseLogLine(it, rules) }
     }
 
