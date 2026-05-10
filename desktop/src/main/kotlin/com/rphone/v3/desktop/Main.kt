@@ -12,6 +12,7 @@ import com.rphone.v3.desktop.tts.DesktopTtsManager
 import com.rphone.v3.desktop.scheduler.BackgroundTaskScheduler
 import com.rphone.v3.desktop.scheduler.SupabaseCloudPollingTask
 import com.google.gson.JsonParser
+import com.google.gson.GsonBuilder
 import javafx.application.Application
 import javafx.application.Platform
 import javafx.beans.value.ChangeListener
@@ -445,6 +446,16 @@ class RPhoneDesktopApp : Application() {
         // hide native title bar to avoid duplicate window controls
         stage.initStyle(StageStyle.UNDECORATED)
         stage.title = "R-Phone V3 Desktop"
+        // application icon (use bundled WaveID logo if available)
+        try {
+            val iconStream = javaClass.getResourceAsStream("/com/rphone/v3/desktop/waveid_logo.png")
+            if (iconStream != null) {
+                val appIcon = Image(iconStream)
+                stage.icons.add(appIcon)
+                iconStream.close()
+            }
+        } catch (_: Exception) {
+        }
         stage.width = 1280.0
         stage.height = 800.0
         // allow maximizing and smaller minimum so users can expand to full screen
@@ -475,6 +486,11 @@ class RPhoneDesktopApp : Application() {
         cloudPollingTask?.stop()
         backgroundScheduler.shutdown()
         ttsManager.shutdown()
+        try {
+            kotlinx.coroutines.runBlocking {
+                try { serial.disconnect() } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {}
         scope.cancel()
         super.stop()
     }
@@ -484,7 +500,7 @@ class RPhoneDesktopApp : Application() {
      * Provides desktop window controls equivalent to native title bar
      */
     private fun buildWindowControlBar(stage: Stage): HBox {
-        val titleLabel = Label("R-Phone V3 Desktop • AI-Powered Device Diagnostics").apply {
+        val titleLabel = Label("WAVEID PROJECT").apply {
             style = "-fx-text-fill: #94A3B8; -fx-font-size: 12; -fx-font-weight: bold;"
             maxWidth = Double.MAX_VALUE
         }
@@ -576,59 +592,11 @@ class RPhoneDesktopApp : Application() {
         navButtons[DesktopPage.SETTINGS] = navButton("⚙ SET", textSecondary) { sendCommand("BUZZ_NAV_SET"); selectPage(DesktopPage.SETTINGS) }
         navButtons.values.forEach { nav.children.add(it) }
 
-        // Wave submenu (mirrors APK sub-items) - initially hidden
-        waveSubNav = VBox(4.0).apply {
-            padding = Insets(6.0, 0.0, 6.0, 8.0)
+        // Keep Wave submenu only in Wave page content (tile grid), not in sidebar.
+        waveSubNav = VBox().apply {
             isVisible = false
             isManaged = false
-            children.addAll(
-                Button("Rekam Baru").apply {
-                    style = buttonStyle(cyan, "#111827", "#00D4FF")
-                    graphic = label("🗂", textPrimary, 14.0, false)
-                    tooltip = Tooltip("Rekam arus boot baru (sama seperti APK)")
-                    setOnAction {
-                        logWaveAction("submenu: Rekam Baru clicked")
-                        sendCommand("BUZZ_REKAM_BARU")
-                        selectPage(DesktopPage.WAVEID)
-                        recordWaveProfile()
-                    }
-                },
-                Button("Database").apply {
-                    style = buttonStyle(textSecondary, "#111827", "#94A3B8")
-                    graphic = label("📁", textPrimary, 14.0, false)
-                    tooltip = Tooltip("Buka dan lihat database WaveID")
-                    setOnAction {
-                        logWaveAction("submenu: Database clicked")
-                        sendCommand("BUZZ_BUKA_DB")
-                        selectPage(DesktopPage.WAVEID)
-                        showWaveDatabaseDialog()
-                    }
-                },
-                Button("Bandingkan").apply {
-                    style = buttonStyle(green, "#111827", "#10B981")
-                    graphic = label("◫", textPrimary, 14.0, false)
-                    tooltip = Tooltip("Bandingkan 2 waveform (overlay)")
-                    setOnAction {
-                        logWaveAction("submenu: Bandingkan clicked")
-                        sendCommand("BUZZ_BANDINGKAN")
-                        selectPage(DesktopPage.WAVEID)
-                        compareLatestWaveProfiles()
-                    }
-                },
-                Button("Import").apply {
-                    style = buttonStyle(purple, "#111827", "#A78BFA")
-                    graphic = label("📥", textPrimary, 14.0, false)
-                    tooltip = Tooltip("Import .rphp dari file lokal")
-                    setOnAction {
-                        logWaveAction("submenu: Import clicked")
-                        sendCommand("BUZZ_IMPORT")
-                        selectPage(DesktopPage.WAVEID)
-                        importWaveLog()
-                    }
-                }
-            )
         }
-        nav.children.add(waveSubNav)
 
         val filler = Region().apply {
             VBox.setVgrow(this, Priority.ALWAYS)
@@ -653,7 +621,7 @@ class RPhoneDesktopApp : Application() {
         val refreshButton = Button("Refresh").apply {
             maxWidth = Double.MAX_VALUE
             style = buttonStyle(cyan, "#111827", "#00D4FF")
-            setOnAction { refreshDevices() }
+            setOnAction { refreshDevices(connectedDevice?.path ?: deviceCombo.value?.path) }
         }
 
         val connectButton = Button("Connect").apply {
@@ -715,7 +683,7 @@ class RPhoneDesktopApp : Application() {
         pageNodes[DesktopPage.SETTINGS] = buildSettingsPage()
 
         return VBox(0.0).apply {
-            style = "-fx-background-color: #050810;"
+            style = "-fx-background-color: linear-gradient(to bottom right, #071427, #081026);"
             children.addAll(topRow, pageHost)
             VBox.setVgrow(pageHost, Priority.ALWAYS)
         }
@@ -1525,15 +1493,6 @@ class RPhoneDesktopApp : Application() {
                         )
                     )
                 }),
-                card("Ambang DTW", VBox(8.0).apply {
-                    children.addAll(
-                        label("Semakin tinggi presentase, pencocokan data semakin ketat", textSecondary, 11.0, false),
-                        HBox(8.0).apply {
-                            children.addAll(dtwSlider, dtwThresholdLabel)
-                            HBox.setHgrow(dtwSlider, Priority.ALWAYS)
-                        }
-                    )
-                }),
                 card("Firmware Update", VBox(8.0).apply {
                     children.addAll(
                         label("Firmware Version: ${com.rphone.v3.desktop.util.FirmwareChecker.KNOWN_FIRMWARE_VERSION}", purple, 11.0, true),
@@ -1681,7 +1640,7 @@ class RPhoneDesktopApp : Application() {
         try {
             val dialogStage = Stage()
             dialogStage.initOwner(primaryStage)
-            dialogStage.initStyle(StageStyle.UTILITY)
+            dialogStage.initStyle(StageStyle.UNDECORATED)
             dialogStage.title = "Set DTW Threshold"
 
             val slider = Slider(90.0, 100.0, dtwThresholdPercent.toDouble()).apply {
@@ -1693,22 +1652,65 @@ class RPhoneDesktopApp : Application() {
             val label = Label("${dtwThresholdPercent}%").apply { style = "-fx-font-weight:bold; -fx-text-fill: #94A3B8;" }
             slider.valueProperty().addListener { _, _, newV -> label.text = "${newV.toInt()}%" }
 
-            val ok = Button("OK").apply {
+            val ok = Button("SIMPAN").apply {
+                style = buttonStyle(cyan, "#111827", "#00D4FF")
                 setOnAction {
                     dtwThresholdPercent = slider.value.toInt()
                     dtwThresholdLabel.text = "${dtwThresholdPercent}%"
+                    // persist immediately so dialog changes are saved
+                    saveDtwThreshold(dtwThresholdPercent)
                     notification.showMessage("DTW threshold set to ${dtwThresholdPercent}%")
                     dialogStage.close()
                 }
             }
+            val cancel = Button("BATAL").apply {
+                style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+                setOnAction { dialogStage.close() }
+            }
             val root = VBox(12.0).apply {
                 padding = Insets(12.0)
-                children.addAll(label, slider, HBox(8.0).apply { children.addAll(Region().apply { HBox.setHgrow(this, Priority.ALWAYS) }, ok) })
+                style = "-fx-background-color: #0D1423; -fx-border-color: #00D4FF; -fx-border-width: 1; -fx-background-radius: 16; -fx-border-radius: 16;"
+                children.addAll(
+                    label("AMBANG DTW", textPrimary, 14.0, true),
+                    label,
+                    slider,
+                    HBox(8.0).apply {
+                        children.addAll(cancel, Region().apply { HBox.setHgrow(this, Priority.ALWAYS) }, ok)
+                    }
+                )
             }
             dialogStage.scene = Scene(root)
             dialogStage.show()
         } catch (e: Exception) {
             notification.showError("Gagal membuka dialog DTW: ${e.message}")
+        }
+    }
+
+    private fun saveDtwThreshold(percent: Int) {
+        scope.launch {
+            try {
+                val fname = "user_settings.json"
+                val current = storage.load(fname).orEmpty()
+                val obj = try {
+                    if (current.isBlank()) {
+                        com.google.gson.JsonObject()
+                    } else {
+                        JsonParser.parseString(current).asJsonObject
+                    }
+                } catch (_: Exception) {
+                    com.google.gson.JsonObject()
+                }
+                obj.addProperty("dtwThreshold", percent)
+                val updated = GsonBuilder().setPrettyPrinting().create().toJson(obj)
+                val ok = storage.save(fname, updated)
+                withContext(Dispatchers.Main) {
+                    if (ok) notification.showSuccess("DTW tersimpan: ${percent}%") else notification.showError("Gagal simpan DTW")
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    notification.showError("Gagal simpan DTW: ${e.message}")
+                }
+            }
         }
     }
 
@@ -1758,7 +1760,7 @@ class RPhoneDesktopApp : Application() {
             dialogStage.title = "Mulai Analisa PSU"
 
             val brands: List<String> = try { waveIdManager.getDistinctBrands("PSU") } catch (_: Exception) { emptyList() }
-            val brandChoices: List<String> = if (brands.isEmpty()) listOf("— Pilih Brand —") else (listOf("— Pilih Brand —") + brands.distinct())
+            val brandChoices: List<String> = (listOf("Generic") + brands.distinct()).distinct()
             val brandCombo = javafx.scene.control.ComboBox(FXCollections.observableArrayList(brandChoices)).apply {
                 value = brandChoices.first()
                 style = comboStyle()
@@ -1774,12 +1776,12 @@ class RPhoneDesktopApp : Application() {
             val infoLabel = label("Pilih brand & model terlebih dahulu", textSecondary, 11.0, false)
 
             fun refreshModelsForBrand(brand: String) {
-                if (brand == "— Pilih Brand —" || brand.isBlank()) {
+                if (brand.isBlank() || brand.equals("Generic", true)) {
                     modelCombo.items.setAll("— Auto —")
                     modelCombo.value = "— Auto —"
                     modelCombo.isDisable = true
-                    infoLabel.text = "Pilih brand & model terlebih dahulu"
-                    infoLabel.setTextFill(Color.web("#475569"))
+                    infoLabel.text = if (brand.equals("Generic", true)) "✓ Generic dipilih — analisa semua brand" else "Pilih brand & model terlebih dahulu"
+                    infoLabel.setTextFill(if (brand.equals("Generic", true)) Color.web("#10B981") else Color.web("#475569"))
                     return
                 }
                 val models = try { waveIdManager.getDistinctModels(brand, "PSU") } catch (_: Exception) { emptyList() }
@@ -1799,15 +1801,14 @@ class RPhoneDesktopApp : Application() {
 
             val btnStart = Button("MULAI ANALISA").apply {
                 style = buttonStyle(cyan, "#111827", "#00D4FF")
-                isDisable = true
+                isDisable = false
+            }
+            val btnCancel = Button("BATAL").apply {
+                style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+                setOnAction { dialogStage.close() }
             }
 
             fun updateStartState() {
-                val brandOk = (brandCombo.value != null && brandCombo.value != "— Pilih Brand —")
-                if (!brandOk) {
-                    btnStart.isDisable = true
-                    return
-                }
                 btnStart.isDisable = false
                 btnStart.setOnAction {
                     val selectedBrand = brandCombo.value ?: "— Pilih Brand —"
@@ -1864,7 +1865,16 @@ class RPhoneDesktopApp : Application() {
 
             val layout = VBox(12.0).apply {
                 padding = Insets(12.0)
-                children.addAll(label("Filter Chipset", textPrimary, 14.0, true), brandCombo, modelCombo, infoLabel, btnStart)
+                style = "-fx-background-color: #0D1423; -fx-border-color: #00D4FF; -fx-border-width: 1; -fx-background-radius: 16; -fx-border-radius: 16;"
+                children.addAll(
+                    label("Filter Chipset", textPrimary, 14.0, true),
+                    brandCombo,
+                    modelCombo,
+                    infoLabel,
+                    HBox(8.0).apply {
+                        children.addAll(btnCancel, Region().apply { HBox.setHgrow(this, Priority.ALWAYS) }, btnStart)
+                    }
+                )
             }
             dialogStage.scene = Scene(layout)
             dialogStage.show()
@@ -1881,7 +1891,7 @@ class RPhoneDesktopApp : Application() {
             dialogStage.title = "Mulai Analisa USB"
 
             val brands: List<String> = try { waveIdManager.getDistinctBrands("USB") } catch (_: Exception) { emptyList() }
-            val brandChoices: List<String> = if (brands.isEmpty()) listOf("— Pilih Brand —") else (listOf("— Pilih Brand —") + brands.distinct())
+            val brandChoices: List<String> = (listOf("Generic") + brands.distinct()).distinct()
             val brandCombo = javafx.scene.control.ComboBox(FXCollections.observableArrayList(brandChoices)).apply {
                 value = brandChoices.first()
                 style = comboStyle()
@@ -1897,11 +1907,11 @@ class RPhoneDesktopApp : Application() {
             val infoLabel = label("Pilih brand & model terlebih dahulu", textSecondary, 11.0, false)
 
             fun refreshModelsForBrand(b: String) {
-                if (b == "— Pilih Brand —" || b.isBlank()) {
+                if (b.isBlank() || b.equals("Generic", true)) {
                     modelCombo.items.setAll("— Auto —")
                     modelCombo.value = "— Auto —"
                     modelCombo.isDisable = true
-                    infoLabel.text = "Pilih brand & model terlebih dahulu"
+                    infoLabel.text = if (b.equals("Generic", true)) "✓ Generic dipilih — analisa semua brand" else "Pilih brand & model terlebih dahulu"
                     return
                 }
                 val profiles = waveIdManager.getProfilesByMode("USB")
@@ -1924,14 +1934,10 @@ class RPhoneDesktopApp : Application() {
 
             val btnStart = Button("MULAI ANALISA").apply {
                 style = buttonStyle(cyan, "#111827", "#00D4FF")
-                isDisable = true
+                isDisable = false
                 setOnAction {
                     val selectedBrandRaw = brandCombo.value ?: ""
-                    if (selectedBrandRaw == "— Pilih Brand —" || selectedBrandRaw.isBlank()) {
-                        notification.showError("Pilih brand chipset terlebih dahulu")
-                        return@setOnAction
-                    }
-                    val selectedBrand = selectedBrandRaw
+                    val selectedBrand = if (selectedBrandRaw.isBlank()) "Generic" else selectedBrandRaw
                     val selectedModel = modelCombo.value?.takeIf { it != "— Auto —" } ?: ""
                     val startIndex = usbWaveState.currentBuf.size
 
@@ -1978,10 +1984,13 @@ class RPhoneDesktopApp : Application() {
                     }
                 }
             }
+            val btnCancel = Button("BATAL").apply {
+                style = buttonStyle(textSecondary, "#111827", "#94A3B8")
+                setOnAction { dialogStage.close() }
+            }
 
             fun updateStartState() {
-                val brandOk = brandCombo.value != null && brandCombo.value != "— Pilih Brand —"
-                btnStart.isDisable = !brandOk
+                btnStart.isDisable = false
             }
             brandCombo.valueProperty().addListener { _, _, _ -> updateStartState() }
             modelCombo.valueProperty().addListener { _, _, _ -> updateStartState() }
@@ -1989,7 +1998,16 @@ class RPhoneDesktopApp : Application() {
 
             val layout = VBox(12.0).apply {
                 padding = Insets(12.0)
-                children.addAll(label("Filter Chipset", textPrimary, 14.0, true), brandCombo, modelCombo, infoLabel, btnStart)
+                style = "-fx-background-color: #0D1423; -fx-border-color: #00D4FF; -fx-border-width: 1; -fx-background-radius: 16; -fx-border-radius: 16;"
+                children.addAll(
+                    label("Filter Chipset", textPrimary, 14.0, true),
+                    brandCombo,
+                    modelCombo,
+                    infoLabel,
+                    HBox(8.0).apply {
+                        children.addAll(btnCancel, Region().apply { HBox.setHgrow(this, Priority.ALWAYS) }, btnStart)
+                    }
+                )
             }
             dialogStage.scene = Scene(layout)
             dialogStage.show()
@@ -2434,7 +2452,8 @@ class RPhoneDesktopApp : Application() {
             blockIncrement = 1.0
             valueProperty().addListener { _, _, newValue ->
                 valueLabel.text = when (title) {
-                    "PWM" -> String.format("%.1fs", (newValue.toDouble() + 1.0) / 10.0)
+                    // PWM value maps to (valueInt + 1) * 0.5 seconds (0.5s steps); show seconds correctly up to 10s
+                    "PWM" -> String.format("%.1fs", (newValue.toInt() + 1) * 0.5)
                     "OCP" -> String.format("%.1fA", (newValue.toDouble() / 10.0) + 0.5)
                     else -> newValue.toString()
                 }
@@ -2661,13 +2680,6 @@ class RPhoneDesktopApp : Application() {
             }
             button.style = navStyle(navPage == page, accent)
         }
-        // Show/hide Wave submenu under sidebar when WaveID page active
-        try {
-            waveSubNav.isVisible = (page == DesktopPage.WAVEID)
-            waveSubNav.isManaged = (page == DesktopPage.WAVEID)
-        } catch (_: Exception) {
-            // ignore if sidebar not fully initialized yet
-        }
         when (page) {
             DesktopPage.USB -> {
                 pageTitle.text = "R-Phone V3 — USB"
@@ -2705,12 +2717,27 @@ class RPhoneDesktopApp : Application() {
     private fun refreshDevices(preferredPath: String? = null) {
         scope.launch {
             val devices = serial.getAvailableDevices()
+            val currentConnectedPath = connectedDevice?.path
+            var lostConnection = false
+            if (serial.isConnected() && currentConnectedPath != null && devices.none { it.path == currentConnectedPath }) {
+                try {
+                    serial.disconnect()
+                } catch (_: Exception) {
+                }
+                connectedDevice = null
+                receiveJob?.cancel()
+                lostConnection = true
+            }
             withContext(Dispatchers.Main) {
                 deviceCombo.items.setAll(devices)
                 usbDeviceCountLabel.text = "${devices.size} device"
                 if (devices.isNotEmpty()) {
                     val selection = preferredPath?.let { path -> devices.firstOrNull { it.path == path } } ?: devices.first()
                     deviceCombo.selectionModel.select(selection)
+                }
+                if (lostConnection) {
+                    updateConnectionState(false, null)
+                    notification.showMessage("Port sebelumnya terlepas. Pilih port lalu Connect ulang.")
                 }
                 if (devices.isEmpty()) {
                     connectionStatus.text = "No serial port"
@@ -2744,6 +2771,19 @@ class RPhoneDesktopApp : Application() {
     private fun connectTo(device: SerialDevice) {
         scope.launch {
             logDebug("USB_CONN", "connect requested: ${device.name} (${device.path})")
+            if (serial.isConnected()) {
+                if (connectedDevice?.path == device.path) {
+                    withContext(Dispatchers.Main) {
+                        updateConnectionState(true, device)
+                    }
+                    return@launch
+                }
+                try {
+                    serial.disconnect()
+                } catch (_: Exception) {
+                }
+                receiveJob?.cancel()
+            }
             val ok = serial.connect(device.path)
             withContext(Dispatchers.Main) {
                 if (ok) {
