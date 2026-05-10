@@ -392,6 +392,7 @@ class RPhoneDesktopApp : Application() {
                 usbMetricPower.text = formatNumber(data.volt * data.curr, 2)
                 usbMetricCharge.text = data.charge
                 usbMetricOcp.text = if (data.ocpEnabled) "ON" else "OFF"
+                    usbMetricOcp.text = data.ocpStatus
                 usbMetricCapacity.text = if (usbViewModel.getCapacityMah() <= 0.0) "--" else formatNumber(usbViewModel.getCapacityMah(), 1)
                 usbWaveState.addSample(data.curr, data.volt, data.volt * data.curr)
                 drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan, usbWaveState)
@@ -403,7 +404,7 @@ class RPhoneDesktopApp : Application() {
         psuViewModel.onDataUpdate = { data ->
             Platform.runLater {
                 psuMetricVoltage.text = formatNumber(data.volt, 3)
-                psuMetricCurrent.text = formatNumber(data.curr / 2.5, 3)
+                psuMetricCurrent.text = formatNumber(data.curr, 3)
                 psuMetricPower.text = formatNumber(data.volt * data.curr, 2)
                 psuMetricCapacity.text = if (psuViewModel.getCapacityMah() <= 0.0) "--" else formatNumber(psuViewModel.getCapacityMah(), 1)
                 psuPwmEnabled = data.pwmEnabled
@@ -2811,6 +2812,22 @@ class RPhoneDesktopApp : Application() {
         logDebug("USB_CONN", "state=${if (connected) "connected" else "disconnected"} device=${device?.path ?: "none"}")
     }
 
+    private fun runFirmwareCheck() {
+        try {
+            val desktopSerial = serial as? com.rphone.v3.desktop.platform.DesktopSerialConnection ?: return
+            com.rphone.v3.desktop.util.FirmwareChecker.reset()
+            com.rphone.v3.desktop.util.FirmwareChecker.cekSetelahKonek(desktopSerial) { needsUpdate ->
+                if (needsUpdate) {
+                    Platform.runLater {
+                        notification.showMessage("Firmware update available: ${com.rphone.v3.desktop.util.FirmwareChecker.getFirmwareInfo()?.version ?: "unknown"}")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logDebug("FIRMWARE", "check failed: ${e.message}")
+        }
+    }
+
     private fun startReceiveLoop() {
         receiveJob?.cancel()
         receiveJob = scope.launch {
@@ -3165,8 +3182,8 @@ class RPhoneDesktopApp : Application() {
         probeDiodeLabel.text = probeDiodeLabel.text ?: (formatNumber(lastKnownValue / 2.0, 3) + " V")
         probeOhmLabel.text = probeOhmLabel.text ?: (formatNumber(lastKnownValue * 10.0, 1) + " Ω")
 
-        drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan)
-        drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple)
+        drawWaveform(usbChartCanvas.graphicsContext2D, usbChartCanvas.width, usbChartCanvas.height, cyan, usbWaveState)
+        drawWaveform(psuChartCanvas.graphicsContext2D, psuChartCanvas.width, psuChartCanvas.height, purple, psuWaveState)
     }
 
     private fun showProbeSaveDialog() {
