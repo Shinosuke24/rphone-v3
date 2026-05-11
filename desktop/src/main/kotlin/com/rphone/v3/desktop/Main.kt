@@ -1196,7 +1196,6 @@ class RPhoneDesktopApp : Application() {
             isWrapText = true
             style = cardStyle() + """; 
                 -fx-cursor: hand;
-                -fx-text-fill: transparent;
                 -fx-padding: 12;
             """
             isPickOnBounds = true
@@ -2338,24 +2337,34 @@ class RPhoneDesktopApp : Application() {
                     }
                     return@withContext
                 }
-                // stage 1: wait for non-zero current (baseline)
+                
+                // stage 1: wait for any waveform data change (APK parity)
+                // Allow generous timeout for boot phase variation
                 val idleStart = System.currentTimeMillis()
+                val maxWaitMs = 60000L  // 60 second timeout (APK default)
                 var detected = false
-                while (System.currentTimeMillis() - idleStart < 20000L && !detected) {
-                    val currNow = usbWaveState.currentBuf.drop(startIndex).lastOrNull() ?: lastKnownValue
-                    if (currNow > 0.05) {
+                var lastObservedSize = usbWaveState.currentBuf.size
+                
+                while (System.currentTimeMillis() - idleStart < maxWaitMs && !detected) {
+                    val currentSize = usbWaveState.currentBuf.size
+                    val currNow = usbWaveState.currentBuf.drop(startIndex).lastOrNull() ?: 0.0
+                    
+                    // Data is flowing if buffer size changed or current > 0.01A (relaxed threshold)
+                    if (currentSize > lastObservedSize || currNow > 0.01) {
                         detected = true
                         break
                     }
-                    kotlinx.coroutines.delay(150)
+                    
+                    lastObservedSize = currentSize
+                    kotlinx.coroutines.delay(100)  // Check more frequently
                 }
 
                 if (!detected) {
                     withContext(Dispatchers.Main) {
-                        usbAnalysisStatus.text = "Timeout menunggu arus"
+                        usbAnalysisStatus.text = "Timeout menunggu arus (${(System.currentTimeMillis() - idleStart) / 1000}s)"
                         usbAnalysisProgress.isVisible = false
                         usbAnalysisProgress.isManaged = false
-                        notification.showError("Perangkat tidak mengirim arus - analisa dibatalkan")
+                        notification.showError("Perangkat tidak mengirim data arus - analisa dibatalkan. Pastikan USB charging terhubung.")
                     }
                     return@withContext
                 }
