@@ -178,6 +178,8 @@ class RPhoneDesktopApp : Application() {
     private var usbLastUpdateMs = 0L
     private val usbChargeVoteBuffer = ArrayDeque<String>(5)
     private var usbLastStableCharge = "Standard Charging"
+    private var latestUsbCurrent = 0.0
+    private var latestUsbVoltage = 0.0
     private var probeActiveMode = "VOLT"
     private var probeSettlingUntilMs = 0L
     private var probePollingJob: Job? = null
@@ -432,6 +434,8 @@ class RPhoneDesktopApp : Application() {
         // Initialize USB/PSU/UART ViewModels (parity with APK)
         usbViewModel = UsbViewModel(storage)
         usbViewModel.onDataUpdate = { data ->
+            latestUsbCurrent = data.curr
+            latestUsbVoltage = data.volt
             Platform.runLater {
                 usbMetricVoltage.text = formatNumber(data.volt, 3)
                 usbMetricCurrent.text = formatNumber(data.curr, 3)
@@ -1161,7 +1165,22 @@ class RPhoneDesktopApp : Application() {
         })
 
         val rightPane = VBox(10.0).apply {
-            children.addAll(menuCard)
+            children.addAll(
+                menuCard,
+                card("WAVE HISTORY", VBox(8.0).apply {
+                    children.addAll(
+                        label("Riwayat profil tersimpan / cloud", textSecondary, 10.0, false),
+                        waveDbCountLabel,
+                        waveHistoryList.apply {
+                            prefHeight = 360.0
+                            minHeight = 300.0
+                            style = historyListStyle()
+                            isVisible = true
+                            isManaged = true
+                        }
+                    )
+                })
+            )
             prefWidth = 740.0
             minWidth = 320.0
             maxWidth = Double.MAX_VALUE
@@ -1208,12 +1227,6 @@ class RPhoneDesktopApp : Application() {
                 )
             }
             setOnAction { action() }
-            setOnMouseClicked { evt ->
-                if (!evt.isConsumed) {
-                    evt.consume()
-                    action()
-                }
-            }
         }
     }
 
@@ -2338,24 +2351,22 @@ class RPhoneDesktopApp : Application() {
                     return@withContext
                 }
                 
-                // stage 1: wait for any waveform data change (APK parity)
-                // Allow generous timeout for boot phase variation
+                // stage 1: wait for live USB current (APK parity)
+                // USB analysis should react to USB current, not PSU-style generic polling.
                 val idleStart = System.currentTimeMillis()
                 val maxWaitMs = 60000L  // 60 second timeout (APK default)
                 var detected = false
-                var lastObservedSize = usbWaveState.currentBuf.size
                 
                 while (System.currentTimeMillis() - idleStart < maxWaitMs && !detected) {
-                    val currentSize = usbWaveState.currentBuf.size
-                    val currNow = usbWaveState.currentBuf.drop(startIndex).lastOrNull() ?: 0.0
-                    
-                    // Data is flowing if buffer size changed or current > 0.01A (relaxed threshold)
-                    if (currentSize > lastObservedSize || currNow > 0.01) {
+                    val currNow = latestUsbCurrent
+                    val voltageNow = latestUsbVoltage
+
+                    // Start immediately when USB current is already flowing.
+                    if (currNow > 0.01 || (currNow > 0.0 && voltageNow > 0.0)) {
                         detected = true
                         break
                     }
-                    
-                    lastObservedSize = currentSize
+
                     kotlinx.coroutines.delay(100)  // Check more frequently
                 }
 
