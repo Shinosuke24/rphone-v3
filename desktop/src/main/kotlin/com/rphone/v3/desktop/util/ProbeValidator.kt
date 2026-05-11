@@ -35,6 +35,32 @@ object ProbeValidator {
     }
 
     /**
+     * Convert command string to ProbeMode
+     * Parity with APK: getModeFromCommand("GET_VOLT") → VOLT
+     */
+    fun getModeFromCommand(command: String): ProbeMode? {
+        return when (command.uppercase()) {
+            "GET_VOLT" -> ProbeMode.VOLT
+            "GET_DIODE" -> ProbeMode.DIODE
+            "GET_OHM" -> ProbeMode.OHM
+            else -> null
+        }
+    }
+
+    /**
+     * Convert ProbeMode to command string
+     * Parity with APK: getCommandFromMode("VOLT") → "GET_VOLT"
+     */
+    fun getCommandFromMode(mode: String): String? {
+        return when (mode.uppercase()) {
+            "VOLT" -> "GET_VOLT"
+            "DIODE" -> "GET_DIODE"
+            "OHM" -> "GET_OHM"
+            else -> null
+        }
+    }
+
+    /**
      * Parse probe data response
      */
     fun parseProbeData(response: String, currentMode: ProbeMode): ProbeData {

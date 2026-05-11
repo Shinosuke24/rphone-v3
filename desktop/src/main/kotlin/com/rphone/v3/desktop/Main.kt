@@ -3359,11 +3359,15 @@ class RPhoneDesktopApp : Application() {
     }
 
     private fun probeCooldownMs(fromMode: String, toMode: String): Long {
+        // Settle cooldown per mode — sinkron dengan firmware v3.3.8 smart duration
+        // OHM↔DIODE: relay tidak gerak → 30ms
+        // VOLT→DIODE/OHM: engage → 60ms
+        // *→VOLT: release lebih lambat → 250ms (parity with APK ProbeViewModel.settleCooldown)
         return when {
-            fromMode == "VOLT" && toMode == "DIODE" -> 800L
-            fromMode == "DIODE" && toMode == "OHM" -> 1200L
-            fromMode == "OHM" && toMode == "VOLT" -> 600L
-            else -> 500L
+            toMode == "VOLT"                                      -> 250L
+            fromMode == "OHM" && toMode == "DIODE"               -> 30L
+            fromMode == "DIODE" && toMode == "OHM"               -> 30L
+            else                                                  -> 60L  // VOLT→DIODE/OHM
         }
     }
 
