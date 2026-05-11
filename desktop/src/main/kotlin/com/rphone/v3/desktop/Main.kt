@@ -178,8 +178,8 @@ class RPhoneDesktopApp : Application() {
     private var usbLastUpdateMs = 0L
     private val usbChargeVoteBuffer = ArrayDeque<String>(5)
     private var usbLastStableCharge = "Standard Charging"
-    private var latestUsbCurrent = 0.0
-    private var latestUsbVoltage = 0.0
+    @Volatile private var latestUsbCurrent = 0.0
+    @Volatile private var latestUsbVoltage = 0.0
     private var probeActiveMode = "VOLT"
     private var probeSettlingUntilMs = 0L
     private var probePollingJob: Job? = null
@@ -1210,6 +1210,8 @@ class RPhoneDesktopApp : Application() {
             minWidth = Double.MAX_VALUE
             prefHeight = 150.0
             minHeight = 140.0
+            text = ""
+            contentDisplay = ContentDisplay.GRAPHIC_ONLY
             isMnemonicParsing = false
             isFocusTraversable = false
             isWrapText = true
@@ -2350,21 +2352,31 @@ class RPhoneDesktopApp : Application() {
                     }
                     return@withContext
                 }
-                
-                // stage 1: wait for live USB current (APK parity)
-                // USB analysis should react to USB current, not PSU-style generic polling.
+
+                val minSamples = 150
+                val idleThresholdA = 0.05
+
+                // stage 1: wait for USB current/data flow (APK state: MENUNGGU)
                 val idleStart = System.currentTimeMillis()
                 val maxWaitMs = 60000L  // 60 second timeout (APK default)
                 var detected = false
-                
+                var statusTick = 0
                 while (System.currentTimeMillis() - idleStart < maxWaitMs && !detected) {
                     val currNow = latestUsbCurrent
                     val voltageNow = latestUsbVoltage
+                    val currentSize = try { usbWaveState.currentBuf.size } catch (_: Exception) { 0 }
 
-                    // Start immediately when USB current is already flowing.
-                    if (currNow > 0.01 || (currNow > 0.0 && voltageNow > 0.0)) {
+                    // Start as soon as USB current rises or USB waveform begins to flow.
+                    if (currNow >= idleThresholdA || (currentSize > startIndex && voltageNow > 0.0)) {
                         detected = true
                         break
+                    }
+
+                    statusTick++
+                    if (statusTick % 5 == 0) {
+                        withContext(Dispatchers.Main) {
+                            usbAnalysisStatus.text = "Menunggu arus USB... ${formatNumber(currNow, 3)} A"
+                        }
                     }
 
                     kotlinx.coroutines.delay(100)  // Check more frequently
@@ -2380,8 +2392,49 @@ class RPhoneDesktopApp : Application() {
                     return@withContext
                 }
 
-                // stage 2: collect waveform samples
-                val samples = collectWaveStateSamples(usbWaveState, startIndex, 25000L, 150)
+                // stage 2: record samples while USB current flows (APK state: MEREKAM)
+                withContext(Dispatchers.Main) {
+                    usbAnalysisStatus.text = "Mengumpulkan data USB... (0/$minSamples)"
+                    usbAnalysisProgress.progress = 0.0
+                }
+
+                val samples = mutableListOf<Float>()
+                var readIndex = startIndex.coerceAtLeast(0)
+                var idleAfterMinStart = 0L
+                val collectStart = System.currentTimeMillis()
+                val collectTimeoutMs = 30000L
+
+                while (System.currentTimeMillis() - collectStart < collectTimeoutMs) {
+                    val snapshot = try {
+                        usbWaveState.currentBuf.toList()
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+
+                    if (readIndex < snapshot.size) {
+                        val newItems = snapshot.subList(readIndex, snapshot.size)
+                        samples.addAll(newItems.map { it.toFloat() })
+                        readIndex = snapshot.size
+
+                        withContext(Dispatchers.Main) {
+                            val progress = (samples.size.toDouble() / minSamples.toDouble()).coerceAtMost(1.0)
+                            usbAnalysisProgress.progress = progress
+                            usbAnalysisStatus.text = "Mengumpulkan data USB... (${samples.size}/$minSamples)"
+                        }
+                    }
+
+                    val currNow = latestUsbCurrent
+                    if (samples.size >= minSamples && currNow < idleThresholdA) {
+                        val now = System.currentTimeMillis()
+                        if (idleAfterMinStart == 0L) idleAfterMinStart = now
+                        if (now - idleAfterMinStart >= 400L) break
+                    } else {
+                        idleAfterMinStart = 0L
+                    }
+
+                    kotlinx.coroutines.delay(100)
+                }
+
                 if (samples.isEmpty()) {
                     withContext(Dispatchers.Main) {
                         usbAnalysisStatus.text = "Gagal merekam waveform"
@@ -6354,7 +6407,7 @@ class RPhoneDesktopApp : Application() {
         } else {
             """
                 -fx-background-color: #080C14;
-                -fx-text-fill: #334155;
+                -fx-text-fill: #94A3B8;
                 -fx-border-color: #131D2E;
                 -fx-border-width: 1;
                 -fx-font-size: 10px;
